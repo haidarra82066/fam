@@ -24,7 +24,7 @@ app.use(cors()); // Falls nötig für Cross-Origin-Anfragen
 
 // Route für den Root-Pfad hinzufügen
 app.get('/', (req, res) => {
-    res.send('Willkommen auf der Familienbaum-Website!');
+    res.send('Willkommen auf der Familienbaum-Website! I Love JANA');
 });
 
 // Benutzer-Login simulieren
