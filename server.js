@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
+const cors = require('cors'); // Falls du CORS benötigst
+
 const app = express();
 const port = 4000;
 
@@ -17,7 +19,13 @@ db.serialize(() => {
 
 // Middleware
 app.use(express.json());
-app.use(express.static('../frontend'));
+app.use(express.static('frontend')); // Statische Dateien bereitstellen
+app.use(cors()); // Falls nötig für Cross-Origin-Anfragen
+
+// Route für den Root-Pfad hinzufügen
+app.get('/', (req, res) => {
+    res.send('Willkommen auf der Familienbaum-Website!');
+});
 
 // Benutzer-Login simulieren
 app.post('/login', (req, res) => {
@@ -44,4 +52,16 @@ app.post('/save', (req, res) => {
 // Server starten
 app.listen(port, () => {
     console.log(`Server läuft auf http://localhost:${port}`);
+});
+
+// DB-Verbindung schließen bei Programmende
+process.on('SIGINT', () => {
+    db.close((err) => {
+        if (err) {
+            console.error("Fehler beim Schließen der DB:", err.message);
+        } else {
+            console.log("Datenbankverbindung geschlossen.");
+        }
+        process.exit(0);
+    });
 });
