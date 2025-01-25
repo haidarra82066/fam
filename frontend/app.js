@@ -24,7 +24,7 @@ function saveTree() {
 }
 
 document.getElementById('addPerson').addEventListener('click', () => {
-    const name = prompt("Name der Person:");
+    const name = prompt("Name:");
     if (name) {
         treeData.push({ name });
         const tree = document.getElementById('tree');
