@@ -1,6 +1,7 @@
 {
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "express": "^4.17.1"
   },
   "name": "familienbaum",
   "version": "1.0.0",
