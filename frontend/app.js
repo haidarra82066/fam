@@ -1,5 +1,5 @@
 document.getElementById('addPerson').addEventListener('click', () => {
-    const name = prompt("Name der Person:");
+    const name = prompt("Name:");
     if (name) {
         const tree = document.getElementById('tree');
         const person = document.createElement('div');
@@ -19,7 +19,7 @@ function saveTree() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, tree: treeData })
     }).then(response => {
-        if (response.ok) alert('Familienbaum gespeichert!');
+        if (response.ok) alert('Family Tree saved!');
     });
 }
 
