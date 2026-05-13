@@ -1,9 +1,37 @@
 # fam
 
-## Environment setup
-1. Copy `.env.example` to `.env`.
-2. Fill in real secrets locally (never commit `.env`).
+Next.js App Router + TypeScript foundation for the family tree app.
+
+## Setup
+
+1. Copy env file:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Run dev server:
+
+```bash
+npm run dev
+```
+
+## Routes scaffolded
+
+- `/`
+- `/login`
+- `/signup`
+- `/pending-approval`
+- `/dashboard`
+- `/tree/[treeId]`
+- `/admin/access-requests`
+
+## Legacy prototype
+
+Previous Express + SQLite prototype moved to `legacy/`.
