@@ -6,22 +6,26 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CreateTreeModal } from '@/components/dashboard/create-tree-modal';
 import { createClient } from '@/lib/supabase/server';
-import { getCurrentUserWithProfile } from '@/lib/auth';
+import { requireUser, parseForm, writeAuditLog, z } from '@/lib/security';
+
+const createTreeSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional(),
+});
 
 async function createTree(formData: FormData) { 'use server';
-  const { user } = await getCurrentUserWithProfile(); if (!user) redirect('/login');
-  const name = String(formData.get('name') ?? '').trim();
-  const description = String(formData.get('description') ?? '').trim();
-  if (!name) redirect('/dashboard?error=missing_name');
+  const { user } = await requireUser();
+  const parsed = parseForm(createTreeSchema, formData);
   const supabase = await createClient();
-  const { data: tree, error } = await supabase.from('family_trees').insert({ owner_id: user.id, name, description: description || null }).select('id').single();
+  const { data: tree, error } = await supabase.from('family_trees').insert({ owner_id: user.id, name: parsed.name, description: parsed.description || null }).select('id').single();
   if (error || !tree) redirect('/dashboard?error=create_tree_failed');
   await supabase.from('tree_memberships').insert({ tree_id: tree.id, user_id: user.id, role: 'owner' });
+  await writeAuditLog({ treeId: tree.id, actorId: user.id, action: 'tree_created', entityType: 'family_tree', entityId: tree.id });
   revalidatePath('/dashboard'); redirect(`/tree/${tree.id}`);
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { user } = await getCurrentUserWithProfile(); if (!user) redirect('/login');
+  const { user } = await requireUser();
   const { error } = await searchParams;
   const supabase = await createClient();
   const { data: memberships } = await supabase.from('tree_memberships').select('tree_id, role').eq('user_id', user.id).eq('status', 'active');
