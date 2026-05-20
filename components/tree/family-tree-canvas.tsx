@@ -1,26 +1,54 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import ReactFlow, { Background, Controls, ReactFlowProvider } from '@xyflow/react';
 
 type Person = Record<string, any>;
 
-function years(p: Person) { const b = p.birth_date ? new Date(p.birth_date).getFullYear() : '?'; const d = p.death_date ? new Date(p.death_date).getFullYear() : ''; return d ? `${b}-${d}` : `${b}`; }
-
-function layout(persons: Person[], unions: any[], parentChild: any[]) {
-  const nodes = persons.map((p, idx) => ({ id: p.id, position: { x: (idx % 4) * 220, y: Math.floor(idx / 4) * 180 }, data: { person: p } }));
-  const edges = [
-    ...unions.map((u) => ({ id: `u-${u.id}`, source: u.partner1_id ?? u.partner_1_id, target: u.partner2_id ?? u.partner_2_id })),
-    ...parentChild.map((r) => ({ id: r.id, source: r.parent_id, target: r.child_id })),
-  ];
-  return { nodes, edges };
+function years(p: Person) {
+  const b = p.birth_date ? new Date(p.birth_date).getFullYear() : '?';
+  const d = p.death_date ? new Date(p.death_date).getFullYear() : '';
+  return d ? `${b}-${d}` : `${b}`;
 }
 
-function CanvasInner(props: any) {
+function buildChildrenMap(parentChild: any[]) {
+  const map = new Map<string, string[]>();
+  for (const rel of parentChild) {
+    const key = rel.parent_id;
+    const list = map.get(key) ?? [];
+    list.push(rel.child_id);
+    map.set(key, list);
+  }
+  return map;
+}
+
+export function FamilyTreeCanvas({ persons, parentChild }: { persons: Person[]; unions: any[]; parentChild: any[]; treeId: string }) {
   const [query, setQuery] = useState('');
-  const prepared = useMemo(() => layout(props.persons, props.unions, props.parentChild), [props.persons, props.unions, props.parentChild]);
-  const nodes = prepared.nodes.filter((n: any) => n.data.person.display_name?.toLowerCase().includes(query.toLowerCase())).map((n: any) => ({ ...n, data: { label: <div className='rounded-full border bg-white px-4 py-2 text-center text-xs'><div className='font-medium'>{n.data.person.display_name}</div><div className='text-muted'>{years(n.data.person)}</div></div> } }));
-  return <div className='h-[70vh] w-full rounded-xl border bg-slate-50'><div className='p-2'><input value={query} onChange={(e) => setQuery(e.target.value)} className='rounded border px-2 py-1 text-sm' placeholder='Search' /></div><ReactFlow nodes={nodes} edges={prepared.edges} fitView><Background /><Controls /></ReactFlow></div>;
-}
+  const personById = useMemo(() => new Map((persons ?? []).map((p) => [p.id, p])), [persons]);
+  const childrenMap = useMemo(() => buildChildrenMap(parentChild ?? []), [parentChild]);
 
-export function FamilyTreeCanvas(props: any) { return <ReactFlowProvider><CanvasInner {...props} /></ReactFlowProvider>; }
+  const filtered = (persons ?? []).filter((p) => p.display_name?.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <div className="w-full rounded-xl border bg-white">
+      <div className="border-b p-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full rounded border px-2 py-1 text-sm"
+          placeholder="Search family members"
+        />
+      </div>
+      <div className="grid gap-3 p-3 sm:grid-cols-2 lg:grid-cols-3">
+        {filtered.map((p) => (
+          <div key={p.id} className="rounded-lg border p-3 text-sm">
+            <p className="font-medium">{p.display_name}</p>
+            <p className="text-xs text-muted">{years(p)}</p>
+            <p className="mt-2 text-xs text-muted">
+              Children: {(childrenMap.get(p.id) ?? []).map((id) => personById.get(id)?.display_name ?? 'Unknown').join(', ') || '—'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
