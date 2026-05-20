@@ -1,11 +1,16 @@
 import type { NextConfig } from 'next';
 
+const scriptSrc =
+  process.env.NODE_ENV === 'development'
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'";
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  scriptSrc,
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co ws://localhost:* ws://127.0.0.1:*",
   "font-src 'self' data:",
   "frame-ancestors 'none'",
   "base-uri 'self'",
