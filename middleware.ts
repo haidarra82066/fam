@@ -1,6 +1,18 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
+const PROTECTED_ROUTES = ['/dashboard', '/tree'];
+const ADMIN_ROUTES = ['/admin'];
+const AUTH_ROUTES = ['/login', '/signup'];
+
+function isProtected(pathname: string) {
+  return PROTECTED_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+function isAdminRoute(pathname: string) {
+  return ADMIN_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -12,8 +24,8 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+        setAll(cookiesToSet: { name: string; value: string; options: import('@supabase/ssr').CookieOptions }[]) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
           response = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
         },
@@ -21,7 +33,37 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getUser();
+  const pathname = request.nextUrl.pathname;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user && (isProtected(pathname) || isAdminRoute(pathname))) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('status').eq('id', user.id).maybeSingle();
+    const status = profile?.status as string | undefined;
+    const isAdmin = (process.env.ADMIN_EMAILS ?? '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean).includes((user.email ?? '').toLowerCase());
+
+    if (AUTH_ROUTES.includes(pathname)) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+
+    if (status === 'rejected' && pathname !== '/rejected') {
+      return NextResponse.redirect(new URL('/rejected', request.url));
+    }
+
+    if (status !== 'approved' && isProtected(pathname)) {
+      return NextResponse.redirect(new URL('/pending-approval', request.url));
+    }
+
+    if (isAdminRoute(pathname) && !isAdmin) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+  }
+
   return response;
 }
 
