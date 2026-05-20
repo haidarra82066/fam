@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { createHash } from 'node:crypto';
-import { z } from 'next/dist/compiled/zod';
+import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUserWithProfile, isAdminEmail } from '@/lib/auth';
 
@@ -41,8 +41,7 @@ export async function assertTreeRole(treeId: string, allowedRoles: string[]) {
   return { supabase, membership: data };
 }
 
-export function parseForm<T>(schema: { safeParse: (input: unknown) => any }, formData: FormData) {
-export function parseForm<T>(schema: z.ZodType<T>, formData: FormData) {
+export function parseForm<T extends z.ZodTypeAny>(schema: T, formData: FormData): z.infer<T> {
   const result = schema.safeParse(Object.fromEntries(formData.entries()));
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? 'invalid_request';

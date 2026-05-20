@@ -15,10 +15,34 @@ function isAdminRoute(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+  const appOrigin = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_BASE_URL ?? request.nextUrl.origin;
+
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': appOrigin,
+        'Access-Control-Allow-Methods': 'GET,POST',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (isProtected(pathname) || isAdminRoute(pathname)) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    return response;
+  }
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
@@ -32,19 +56,6 @@ export async function middleware(request: NextRequest) {
       },
     },
   );
-
-  const pathname = request.nextUrl.pathname;
-  if (request.method === 'OPTIONS') {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL ?? 'https://your-app.vercel.app',
-        'Access-Control-Allow-Origin': process.env.APP_BASE_URL ?? 'https://example.com',
-        'Access-Control-Allow-Methods': 'GET,POST',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    });
-  }
 
   const {
     data: { user },

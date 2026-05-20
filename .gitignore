@@ -1,6 +1,9 @@
 # Node.js-spezifisch
 node_modules/
 .env
+.env*.local
+.next/
+out/
 
 # Logs
 *.log
