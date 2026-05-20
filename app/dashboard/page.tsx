@@ -40,14 +40,6 @@ async function createTree(formData: FormData) {
 
   await supabase.from('audit_logs').insert({ action: 'tree_created', performed_by: user.id, metadata: { tree_id: tree.id, name } });
 
-  if (membershipError) redirect('/dashboard?error=create_membership_failed');
-
-  await supabase.from('audit_logs').insert({
-    action: 'tree_created',
-    performed_by: user.id,
-    metadata: { tree_id: tree.id, name },
-  });
-
   revalidatePath('/dashboard');
   redirect(`/tree/${tree.id}`);
 }
@@ -69,24 +61,6 @@ async function renameTree(formData: FormData) {
   if (renameError) redirect('/dashboard?error=rename_failed');
 
   await supabase.from('audit_logs').insert({ action: 'tree_renamed', performed_by: user.id, metadata: { tree_id: treeId, name } });
-  const { data: membership } = await supabase
-    .from('tree_memberships')
-    .select('role')
-    .eq('tree_id', treeId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (!membership) redirect('/dashboard');
-
-  const { error } = await supabase.from('family_trees').update({ name }).eq('id', treeId);
-  if (error) redirect('/dashboard?error=rename_failed');
-
-  await supabase.from('audit_logs').insert({
-    action: 'tree_renamed',
-    performed_by: user.id,
-    metadata: { tree_id: treeId, name },
-  });
-
   revalidatePath('/dashboard');
 }
 
