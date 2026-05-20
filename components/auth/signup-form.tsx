@@ -19,7 +19,7 @@ export function SignupForm() {
     setLoading(true);
 
     const supabase = createClient();
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -29,26 +29,6 @@ export function SignupForm() {
 
     if (signUpError) {
       setError(signUpError.message);
-      setLoading(false);
-      return;
-    }
-
-    const userId = data.user?.id;
-    if (!userId) {
-      setError('Account created, but no user session was returned. Try logging in.');
-      setLoading(false);
-      return;
-    }
-
-    const { error: profileError } = await supabase.from('profiles').upsert({
-      id: userId,
-      email,
-      full_name: fullName,
-      status: 'pending',
-    });
-
-    if (profileError) {
-      setError(profileError.message);
       setLoading(false);
       return;
     }
