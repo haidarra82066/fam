@@ -4,26 +4,33 @@ import { SiteShell } from '@/components/site-shell';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/server';
-import { getCurrentUserWithProfile } from '@/lib/auth';
+import { parseForm, requireUser, writeAuditLog, z } from '@/lib/security';
+
+const updateRoleSchema = z.object({ membership_id: z.string().uuid(), role: z.enum(['viewer', 'contributor', 'editor']), tree_id: z.string().uuid() });
+const revokeMemberSchema = z.object({ membership_id: z.string().uuid(), tree_id: z.string().uuid() });
 
 async function updateRole(formData: FormData) { 'use server';
- const { user } = await getCurrentUserWithProfile(); if (!user) redirect('/login'); const supabase=await createClient();
- const id=String(formData.get('membership_id')??''); const role=String(formData.get('role')??'viewer'); const treeId=String(formData.get('tree_id')??'');
+ const { user } = await requireUser(); const supabase=await createClient();
+ const { membership_id:id, role, tree_id:treeId } = parseForm(updateRoleSchema, formData);
+ const { data: me } = await supabase.from('tree_memberships').select('role').eq('tree_id', treeId).eq('user_id', user.id).eq('status','active').maybeSingle();
+ if (!me || !['owner','editor'].includes(me.role)) redirect(`/tree/${treeId}?error=not_authorized`);
  await supabase.from('tree_memberships').update({ role }).eq('id', id);
- await supabase.from('audit_logs').insert({ tree_id: treeId, actor_id: user.id, action: 'role_changed', entity_type: 'tree_membership', entity_id: id, metadata: { role } });
+ await writeAuditLog({ treeId, actorId: user.id, action: 'role_changed', entityType: 'tree_membership', entityId: id, metadata: { role } });
  revalidatePath(`/tree/${treeId}/members`);
 }
 
 async function revokeMember(formData: FormData) { 'use server';
- const { user } = await getCurrentUserWithProfile(); if (!user) redirect('/login'); const supabase=await createClient();
- const id=String(formData.get('membership_id')??''); const treeId=String(formData.get('tree_id')??'');
+ const { user } = await requireUser(); const supabase=await createClient();
+ const { membership_id:id, tree_id:treeId } = parseForm(revokeMemberSchema, formData);
+ const { data: me } = await supabase.from('tree_memberships').select('role').eq('tree_id', treeId).eq('user_id', user.id).eq('status','active').maybeSingle();
+ if (!me || !['owner','editor'].includes(me.role)) redirect(`/tree/${treeId}?error=not_authorized`);
  await supabase.from('tree_memberships').update({ status: 'removed' }).eq('id', id);
- await supabase.from('audit_logs').insert({ tree_id: treeId, actor_id: user.id, action: 'member_removed', entity_type: 'tree_membership', entity_id: id, metadata: {} });
+ await writeAuditLog({ treeId, actorId: user.id, action: 'member_removed', entityType: 'tree_membership', entityId: id, metadata: {} });
  revalidatePath(`/tree/${treeId}/members`);
 }
 
 export default async function MembersPage({ params }: { params: Promise<{ treeId: string }> }) {
- const { treeId } = await params; const { user } = await getCurrentUserWithProfile(); if (!user) redirect('/login');
+ const { treeId } = await params; const { user } = await requireUser();
  const supabase=await createClient();
  const { data: me } = await supabase.from('tree_memberships').select('role').eq('tree_id', treeId).eq('user_id', user.id).maybeSingle();
  if (!me) notFound();

@@ -34,6 +34,17 @@ export async function middleware(request: NextRequest) {
   );
 
   const pathname = request.nextUrl.pathname;
+  if (request.method === 'OPTIONS') {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': process.env.NEXT_PUBLIC_APP_URL ?? 'https://your-app.vercel.app',
+        'Access-Control-Allow-Methods': 'GET,POST',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
