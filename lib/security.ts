@@ -42,6 +42,7 @@ export async function assertTreeRole(treeId: string, allowedRoles: string[]) {
 }
 
 export function parseForm<T>(schema: { safeParse: (input: unknown) => any }, formData: FormData) {
+export function parseForm<T>(schema: z.ZodType<T>, formData: FormData) {
   const result = schema.safeParse(Object.fromEntries(formData.entries()));
   if (!result.success) {
     const message = result.error.issues[0]?.message ?? 'invalid_request';
