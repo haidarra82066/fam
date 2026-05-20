@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { SiteShell } from '@/components/site-shell';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { CreateTreeModal } from '@/components/dashboard/create-tree-modal';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUserWithProfile } from '@/lib/auth';
 
