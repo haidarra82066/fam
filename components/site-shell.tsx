@@ -22,6 +22,7 @@ export async function SiteShell({ children }: { children: React.ReactNode }) {
             ) : (
               <>
                 <Link href="/dashboard">Dashboard</Link>
+                <Link href="/features">Features</Link>
                 {isAdminEmail(user.email) ? <Link href="/admin/access-requests">Admin</Link> : null}
                 <form action="/auth/logout" method="post">
                   <button className="text-sm text-muted hover:text-black" type="submit">Logout</button>
