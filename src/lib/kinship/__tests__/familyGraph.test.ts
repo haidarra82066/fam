@@ -100,7 +100,7 @@ describe('family graph derivation and layout', () => {
     expect(graph.edges.some((edge) => edge.sourceId === 'child-a' && edge.targetId === 'child-b')).toBe(false);
   });
 
-  it.each(['adoptive', 'foster', 'step', 'guardian'] as const)('keeps %s parents above children with distinct edge styling', (role) => {
+  it.each(['adoptive', 'foster', 'step', 'guardian', 'donor', 'surrogate'] as const)('keeps %s parents above children with distinct edge styling', (role) => {
     const { graph, node } = layout(['parent', 'child'], [
       { id: 'pc1', type: 'parent_child', parentId: 'parent', childId: 'child', parentRole: role },
     ]);
@@ -110,6 +110,33 @@ describe('family graph derivation and layout', () => {
     expect(node('parent').generation).toBe(node('child').generation - 1);
     expect('strokeDasharray' in edgeStyleForFamilyEdge(edge!)).toBe(true);
     expect(edgeStyleForFamilyEdge(edge!)).not.toEqual(relationshipEdgeStyles.biological_parent_child);
+  });
+
+  it('groups siblings connected through a placeholder parent', () => {
+    const relationships: FamilyRelationship[] = [
+      { id: 'pc1', type: 'parent_child', parentId: 'unknown-parent', childId: 'selected', parentRole: 'unknown' },
+      { id: 'pc2', type: 'parent_child', parentId: 'unknown-parent', childId: 'sibling', parentRole: 'unknown' },
+    ];
+
+    const { graph, node } = layout(['unknown-parent', 'selected', 'sibling'], relationships);
+
+    expect(node('unknown-parent').generation).toBe(node('selected').generation - 1);
+    expect(node('selected').generation).toBe(node('sibling').generation);
+    expect(graph.familyUnits).toHaveLength(1);
+    expect(graph.familyUnits[0].childIds).toEqual(['selected', 'sibling']);
+  });
+
+  it('supports selective shared-parent half siblings', () => {
+    const relationships: FamilyRelationship[] = [
+      { id: 'pc1', type: 'parent_child', parentId: 'shared-parent', childId: 'selected', parentRole: 'biological' },
+      { id: 'pc2', type: 'parent_child', parentId: 'other-parent', childId: 'selected', parentRole: 'biological' },
+      { id: 'pc3', type: 'parent_child', parentId: 'shared-parent', childId: 'half-sibling', parentRole: 'biological' },
+    ];
+
+    const { graph, node } = layout(['shared-parent', 'other-parent', 'selected', 'half-sibling'], relationships);
+
+    expect(node('selected').generation).toBe(node('half-sibling').generation);
+    expect(graph.familyUnits).toHaveLength(2);
   });
 
   it('lays out selected-style family data with parents above, partner beside, child below', () => {

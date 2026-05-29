@@ -24,30 +24,33 @@ export async function SiteShell({
   }
 
   return (
-    <div className={isWorkspace ? 'flex min-h-screen flex-col' : 'min-h-screen'}>
-      <header className="border-b border-border bg-white/80 backdrop-blur">
-        <div className={isWorkspace ? 'flex w-full items-center justify-between px-4 py-4' : 'mx-auto flex max-w-5xl items-center justify-between px-4 py-4'}>
-          <Link href="/" className="text-lg font-semibold tracking-tight">fam</Link>
-          <nav className="flex items-center gap-4 text-sm text-muted">
+    <div className={isWorkspace ? 'flex min-h-dvh flex-col bg-[#eef4f2]' : 'min-h-dvh bg-background'}>
+      <header className="sticky top-0 z-40 border-b border-border bg-white/90 backdrop-blur">
+        <div className={isWorkspace ? 'flex w-full flex-wrap items-center justify-between gap-3 px-3 py-3 sm:px-4' : 'mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3'}>
+          <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight text-slate-950">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#e7f1ef] text-sm font-bold text-accent">f</span>
+            <span>fam</span>
+          </Link>
+          <nav className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-muted sm:gap-3">
             {!userEmail ? (
               <>
-                <Link href="/login">Login</Link>
-                <Link href="/signup">Sign up</Link>
+                <Link className="rounded-lg px-3 py-2 hover:bg-slate-100 hover:text-slate-950" href="/login">Login</Link>
+                <Link className="rounded-lg bg-accent px-3 py-2 font-semibold text-white hover:bg-[#447d84]" href="/signup">Sign up</Link>
               </>
             ) : (
               <>
-                <Link href="/dashboard">Dashboard</Link>
-                <Link href="/features">Features</Link>
-                {isAdminEmail(userEmail) ? <Link href="/admin/access-requests">Admin</Link> : null}
+                <Link className="rounded-lg px-3 py-2 hover:bg-slate-100 hover:text-slate-950" href="/dashboard">Dashboard</Link>
+                <Link className="rounded-lg px-3 py-2 hover:bg-slate-100 hover:text-slate-950" href="/features">Features</Link>
+                {isAdminEmail(userEmail) ? <Link className="rounded-lg px-3 py-2 hover:bg-slate-100 hover:text-slate-950" href="/admin/access-requests">Admin</Link> : null}
                 <form action="/auth/logout" method="post">
-                  <button className="text-sm text-muted hover:text-black" type="submit">Logout</button>
+                  <button className="rounded-lg px-3 py-2 text-sm text-muted hover:bg-slate-100 hover:text-slate-950" type="submit">Logout</button>
                 </form>
               </>
             )}
           </nav>
         </div>
       </header>
-      <main className={isWorkspace ? 'flex min-h-0 flex-1 flex-col px-4 py-4' : 'mx-auto max-w-5xl px-4 py-10'}>{children}</main>
+      <main className={isWorkspace ? 'flex min-h-0 flex-1 flex-col p-3 sm:p-4' : 'mx-auto w-full max-w-7xl px-4 py-8 sm:py-10'}>{children}</main>
     </div>
   );
 }

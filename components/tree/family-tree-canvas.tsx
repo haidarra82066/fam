@@ -24,6 +24,7 @@ import {
   type FamilyGraphEdge,
   type FamilyPerson,
 } from '@/src/lib/kinship/familyGraph';
+import { deriveRelationshipsFromDbRows } from '@/src/lib/kinship/dbRows';
 
 const ReactFlow = (ReactFlowLib as any).ReactFlow;
 const Background = (ReactFlowLib as any).Background;
@@ -87,11 +88,19 @@ type RelationshipMode =
   | 'partner'
   | 'spouse'
   | 'ex_partner'
+  | 'divorced_partner'
+  | 'co_parent'
+  | 'separated_partner'
+  | 'unknown_partner'
   | 'sibling'
+  | 'brother'
+  | 'sister'
   | 'adoptive_parent'
   | 'step_parent'
   | 'foster_parent'
-  | 'guardian';
+  | 'guardian'
+  | 'donor_parent'
+  | 'surrogate_parent';
 
 type Props = {
   persons: Person[];
@@ -105,19 +114,66 @@ type Props = {
 
 const nodeTypes = { personBubble: PersonBubbleNode, familyJunction: FamilyJunctionNode };
 
-const relationshipActions: Array<{ mode: RelationshipMode; label: string; icon: typeof UserPlus }> = [
-  { mode: 'father', label: 'Add father', icon: UserPlus },
-  { mode: 'mother', label: 'Add mother', icon: UserPlus },
-  { mode: 'parent', label: 'Add parent', icon: UserPlus },
-  { mode: 'child', label: 'Add child', icon: Baby },
-  { mode: 'partner', label: 'Add partner', icon: Heart },
-  { mode: 'spouse', label: 'Add spouse', icon: Heart },
-  { mode: 'ex_partner', label: 'Add ex-partner', icon: Heart },
-  { mode: 'sibling', label: 'Add sibling', icon: Users },
-  { mode: 'adoptive_parent', label: 'Add adoptive parent', icon: UserPlus },
-  { mode: 'step_parent', label: 'Add step parent', icon: UserPlus },
-  { mode: 'foster_parent', label: 'Add foster parent', icon: UserPlus },
-  { mode: 'guardian', label: 'Add guardian', icon: UserPlus },
+const relationshipActionGroups: Array<{
+  title: string;
+  actions: Array<{ mode: RelationshipMode; label: string; icon: typeof UserPlus }>;
+}> = [
+  {
+    title: 'Parents',
+    actions: [
+      { mode: 'father', label: 'Father', icon: UserPlus },
+      { mode: 'mother', label: 'Mother', icon: UserPlus },
+      { mode: 'parent', label: 'Parent', icon: UserPlus },
+      { mode: 'adoptive_parent', label: 'Adoptive parent', icon: UserPlus },
+      { mode: 'step_parent', label: 'Step parent', icon: UserPlus },
+      { mode: 'foster_parent', label: 'Foster parent', icon: UserPlus },
+      { mode: 'guardian', label: 'Guardian', icon: UserPlus },
+      { mode: 'donor_parent', label: 'Donor parent', icon: UserPlus },
+      { mode: 'surrogate_parent', label: 'Surrogate parent', icon: UserPlus },
+    ],
+  },
+  {
+    title: 'Same generation',
+    actions: [
+      { mode: 'brother', label: 'Brother', icon: Users },
+      { mode: 'sister', label: 'Sister', icon: Users },
+      { mode: 'sibling', label: 'Sibling', icon: Users },
+      { mode: 'partner', label: 'Partner', icon: Heart },
+      { mode: 'spouse', label: 'Spouse', icon: Heart },
+      { mode: 'ex_partner', label: 'Ex-partner', icon: Heart },
+      { mode: 'divorced_partner', label: 'Divorced partner', icon: Heart },
+      { mode: 'co_parent', label: 'Co-parent', icon: Heart },
+      { mode: 'separated_partner', label: 'Separated partner', icon: Heart },
+      { mode: 'unknown_partner', label: 'Relationship', icon: Heart },
+    ],
+  },
+  {
+    title: 'Children',
+    actions: [{ mode: 'child', label: 'Child', icon: Baby }],
+  },
+];
+
+const existingRelationshipOptions: Array<{ value: RelationshipMode | 'parent' | 'child'; label: string }> = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+  { value: 'father', label: 'Father' },
+  { value: 'mother', label: 'Mother' },
+  { value: 'brother', label: 'Brother' },
+  { value: 'sister', label: 'Sister' },
+  { value: 'sibling', label: 'Sibling' },
+  { value: 'partner', label: 'Partner' },
+  { value: 'spouse', label: 'Spouse' },
+  { value: 'ex_partner', label: 'Ex-partner' },
+  { value: 'divorced_partner', label: 'Divorced partner' },
+  { value: 'co_parent', label: 'Co-parent' },
+  { value: 'separated_partner', label: 'Separated partner' },
+  { value: 'unknown_partner', label: 'Relationship' },
+  { value: 'adoptive_parent', label: 'Adoptive parent' },
+  { value: 'foster_parent', label: 'Foster parent' },
+  { value: 'step_parent', label: 'Step parent' },
+  { value: 'guardian', label: 'Guardian' },
+  { value: 'donor_parent', label: 'Donor parent' },
+  { value: 'surrogate_parent', label: 'Surrogate parent' },
 ];
 
 const dialogTitles: Record<RelationshipMode | 'first_person' | 'existing', string> = {
@@ -129,11 +185,19 @@ const dialogTitles: Record<RelationshipMode | 'first_person' | 'existing', strin
   partner: 'Add partner',
   spouse: 'Add spouse',
   ex_partner: 'Add ex-partner',
+  divorced_partner: 'Add divorced partner',
+  co_parent: 'Add co-parent',
+  separated_partner: 'Add separated partner',
+  unknown_partner: 'Add relationship',
   sibling: 'Add sibling',
+  brother: 'Add brother',
+  sister: 'Add sister',
   adoptive_parent: 'Add adoptive parent',
   step_parent: 'Add step parent',
   foster_parent: 'Add foster parent',
   guardian: 'Add guardian',
+  donor_parent: 'Add donor parent',
+  surrogate_parent: 'Add surrogate parent',
   existing: 'Add existing person as relative',
 };
 
@@ -165,23 +229,6 @@ function partnerName(union: Union, selectedId: string, personById: Map<string, P
   return partnerId ? personById.get(partnerId)?.display_name ?? 'Unknown partner' : 'Unknown partner';
 }
 
-function createRelationshipIndexes(parentChild: ParentChild[]) {
-  const parentsByChild = new Map<string, ParentChild[]>();
-  const childrenByParent = new Map<string, ParentChild[]>();
-
-  for (const relation of parentChild) {
-    const parents = parentsByChild.get(relation.child_id) ?? [];
-    parents.push(relation);
-    parentsByChild.set(relation.child_id, parents);
-
-    const children = childrenByParent.get(relation.parent_id) ?? [];
-    children.push(relation);
-    childrenByParent.set(relation.parent_id, children);
-  }
-
-  return { parentsByChild, childrenByParent };
-}
-
 function buildPositionedGraph(persons: Person[], parentChild: ParentChild[], unions: Union[]) {
   const familyPersons: FamilyPerson[] = persons.map((person, index) => ({
     id: person.id,
@@ -194,63 +241,14 @@ function buildPositionedGraph(persons: Person[], parentChild: ParentChild[], uni
   return layoutFamilyGraph(buildFamilyGraph(familyPersons, relationships));
 }
 
-function relationshipLabel(personId: string, focusId: string | null, persons: Person[], parentChild: ParentChild[], unions: Union[]) {
-  if (!focusId || personId === focusId) return 'Focus person';
-
-  const personById = new Map(persons.map((person) => [person.id, person]));
-  const focus = personById.get(focusId);
-  const person = personById.get(personId);
-  const parentsOfFocus = parentChild.filter((relation) => relation.child_id === focusId);
-  const parentsOfPerson = parentChild.filter((relation) => relation.child_id === personId);
-
-  const directParent = parentsOfFocus.find((relation) => relation.parent_id === personId);
-  if (directParent) {
-    if (directParent.parent_role === 'adoptive') return 'adoptive parent';
-    if (directParent.parent_role === 'step') return 'step parent';
-    if (directParent.parent_role === 'foster') return 'foster parent';
-    if (directParent.parent_role === 'guardian') return 'guardian';
-    if (person?.gender === 'male') return 'father';
-    if (person?.gender === 'female') return 'mother';
-    return 'parent';
-  }
-
-  if (parentChild.some((relation) => relation.parent_id === focusId && relation.child_id === personId)) {
-    if (person?.gender === 'male') return 'son';
-    if (person?.gender === 'female') return 'daughter';
-    return 'child';
-  }
-
-  const union = unions.find((item) => {
-    const partner2Id = item.partner2_id;
-    return partner2Id && ((item.partner1_id === focusId && partner2Id === personId) || (item.partner1_id === personId && partner2Id === focusId));
-  });
-
-  if (union) {
-    if (union.union_type === 'married') return 'spouse';
-    if (union.union_type === 'ex_partner' || union.union_type === 'divorced' || union.union_type === 'separated') return 'ex-partner';
-    return 'partner';
-  }
-
-  const sharedParents = parentsOfPerson.filter((relation) => parentsOfFocus.some((focusParent) => focusParent.parent_id === relation.parent_id));
-  if (sharedParents.length) return sharedParents.length === 1 ? 'half-sibling' : 'sibling';
-
-  const focusParents = new Set(parentsOfFocus.map((relation) => relation.parent_id));
-  if (parentChild.some((relation) => relation.child_id && focusParents.has(relation.child_id) && relation.parent_id === personId)) {
-    return person?.gender === 'female' ? 'grandmother' : person?.gender === 'male' ? 'grandfather' : 'grandparent';
-  }
-
-  const personParents = new Set(parentsOfPerson.map((relation) => relation.parent_id));
-  if (parentChild.some((relation) => relation.child_id && personParents.has(relation.child_id) && relation.parent_id === focusId)) {
-    return focus?.gender === 'female' ? 'grandchild' : 'grandchild';
-  }
-
-  return 'family member';
-}
-
 function labelForGraphEdge(edge: FamilyGraphEdge) {
   if (edge.kind === 'partner') {
     if (edge.relationshipType === 'spouse') return 'spouse';
     if (edge.relationshipType === 'ex_partner') return 'ex-partner';
+    if (edge.relationshipType === 'divorced') return 'divorced';
+    if (edge.relationshipType === 'separated') return 'separated';
+    if (edge.relationshipType === 'co_parent') return 'co-parent';
+    if (edge.relationshipType === 'unknown') return 'relationship';
     return 'partner';
   }
 
@@ -311,7 +309,7 @@ function PersonBubbleNode({ data }: { data: any }) {
         if (event.key === 'Enter' || event.key === ' ') data.onSelect(person.id);
       }}
       className={cn(
-        'group w-[220px] rounded-[28px] border bg-white px-4 py-3 text-left shadow-[0_18px_50px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_60px_rgba(37,54,63,0.18)]',
+        'group w-[220px] rounded-xl border bg-white px-4 py-3 text-left shadow-[0_14px_34px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(37,54,63,0.16)]',
         data.selected ? 'border-accent ring-4 ring-accent/15' : 'border-slate-200',
         isDeceased && 'border-slate-300 bg-slate-50',
         !data.searchMatch && 'opacity-30',
@@ -344,9 +342,9 @@ function PersonBubbleNode({ data }: { data: any }) {
       </div>
 
       <div className="mt-3 flex items-center gap-2 text-[11px] text-slate-500">
-        {isDeceased ? <span className="rounded-full bg-slate-100 px-2 py-0.5">Remembered</span> : null}
-        {person.short_bio || person.notes ? <span className="rounded-full bg-[#eef7f5] px-2 py-0.5">Notes</span> : null}
-        {!person.birth_date ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Incomplete</span> : null}
+        {isDeceased ? <span className="rounded-md bg-slate-100 px-2 py-0.5">Remembered</span> : null}
+        {person.short_bio || person.notes ? <span className="rounded-md bg-[#eef7f5] px-2 py-0.5">Notes</span> : null}
+        {!person.birth_date ? <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-700">Incomplete</span> : null}
       </div>
     </div>
   );
@@ -379,8 +377,19 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(persons[0]?.id ?? null);
   const [dialog, setDialog] = useState<CreateDialog | null>(null);
   const personById = useMemo(() => new Map(persons.map((person) => [person.id, person])), [persons]);
-  const { parentsByChild } = useMemo(() => createRelationshipIndexes(parentChild), [parentChild]);
   const positionedGraph = useMemo(() => buildPositionedGraph(persons, parentChild, unions), [parentChild, persons, unions]);
+  const relationshipLabels = useMemo<Record<string, { relationship_label: string }>>(
+    () =>
+      selectedPersonId
+        ? deriveRelationshipsFromDbRows({
+            persons,
+            unions,
+            parentChild,
+            focusPersonId: selectedPersonId,
+          })
+        : {},
+    [parentChild, persons, selectedPersonId, unions],
+  );
   const personPositions = useMemo(() => new Map(positionedGraph.personNodes.map((node) => [node.id, node.position])), [positionedGraph]);
   const geometryById = useMemo(() => {
     const geometry = new Map<string, { position: { x: number; y: number }; width: number; height: number }>();
@@ -422,7 +431,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             selected: person.id === selectedPersonId,
             searchMatch,
             onSelect: setSelectedPersonId,
-            relationshipLabel: relationshipLabel(person.id, selectedPersonId, persons, parentChild, unions),
+            relationshipLabel: person.id === selectedPersonId ? 'Focus person' : relationshipLabels[person.id]?.relationship_label ?? 'family member',
           },
         };
       }),
@@ -436,7 +445,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         data: { familyUnit: graphNode.familyUnit },
       })),
     ].filter(Boolean),
-    [parentChild, personById, persons, positionedGraph, searchValue, selectedPersonId, unions],
+    [personById, positionedGraph, relationshipLabels, searchValue, selectedPersonId],
   );
 
   const edges = useMemo(
@@ -483,7 +492,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
 
   if (!persons.length) {
     return (
-      <div className="relative flex h-full min-h-[520px] overflow-hidden rounded-[24px] border border-border bg-[radial-gradient(circle_at_center,#ffffff_0%,#f4faf8_48%,#edf3f1_100%)] shadow-soft">
+      <div className="relative flex h-full min-h-[560px] overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_center,#ffffff_0%,#f4faf8_48%,#edf3f1_100%)] shadow-soft">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(79,141,149,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(79,141,149,0.08)_1px,transparent_1px)] bg-[size:40px_40px]" />
         <div className="relative grid min-h-full flex-1 place-items-center p-6 text-center">
           <div className="max-w-sm">
@@ -493,7 +502,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Start your family tree</h2>
             <p className="mt-3 text-sm leading-6 text-muted">Begin with any person you know. It can be you, a parent, a grandparent, or an ancestor.</p>
             {canEdit ? (
-              <Button type="button" className="mt-6 rounded-full px-6 py-3" onClick={() => setDialog({ mode: 'first_person' })}>
+            <Button type="button" className="mt-6 rounded-lg px-6 py-3" onClick={() => setDialog({ mode: 'first_person' })}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add first person
               </Button>
@@ -517,9 +526,9 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   }
 
   return (
-    <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-border bg-[#f8fbfa] shadow-soft">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/85 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
-        <div className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-white px-3 py-2 shadow-sm md:w-[340px]">
+    <div className="relative flex h-full min-h-[560px] flex-col overflow-hidden rounded-lg border border-border bg-[#f8fbfa] shadow-soft">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/90 p-3 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 shadow-sm lg:w-[360px]">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input
             value={query}
@@ -530,12 +539,12 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         </div>
         <div className="flex flex-wrap gap-2">
           {canEdit ? (
-            <Button type="button" className="rounded-full" onClick={() => setDialog({ mode: 'first_person' })}>
+            <Button type="button" className="rounded-lg" onClick={() => setDialog({ mode: 'first_person' })}>
               <UserPlus className="mr-2 h-4 w-4" />
               Add person
             </Button>
           ) : null}
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => fitView({ padding: 0.24, duration: 500 })}>
+          <Button type="button" variant="outline" className="rounded-lg" onClick={() => fitView({ padding: 0.24, duration: 500 })}>
             <ZoomIn className="mr-2 h-4 w-4" />
             Fit tree
           </Button>
@@ -543,12 +552,12 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
       </div>
 
       {searchMatches.length ? (
-        <div className="absolute left-4 top-[78px] z-20 w-[min(320px,calc(100%-2rem))] rounded-2xl border border-border bg-white p-2 shadow-soft">
+        <div className="absolute left-4 top-[76px] z-20 w-[min(320px,calc(100%-2rem))] rounded-lg border border-border bg-white p-2 shadow-soft">
           {searchMatches.map((person) => (
             <button
               key={person.id}
               type="button"
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm hover:bg-[#eef7f5]"
+              className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-[#eef7f5]"
               onClick={() => centerPerson(person.id)}
             >
               {person.display_name}
@@ -593,7 +602,6 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             persons={persons}
             selectedUnions={selectedUnions}
             personById={personById}
-            parentCount={parentsByChild.get(selectedPerson.id)?.length ?? 0}
             updateAction={updatePersonAction}
             onClose={() => setSelectedPersonId(null)}
             onCreate={(mode) => setDialog({ mode, targetId: selectedPerson.id })}
@@ -625,7 +633,6 @@ function PersonDrawer({
   persons,
   selectedUnions,
   personById,
-  parentCount,
   updateAction,
   onClose,
   onCreate,
@@ -637,47 +644,53 @@ function PersonDrawer({
   persons: Person[];
   selectedUnions: Union[];
   personById: Map<string, Person>;
-  parentCount: number;
   updateAction: (formData: FormData) => void | Promise<void>;
   onClose: () => void;
   onCreate: (mode: RelationshipMode) => void;
   onConnectExisting: () => void;
 }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-[28px] border-t border-border bg-white p-4 shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[390px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
+    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-xl border-t border-border bg-white p-4 shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[400px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Person details</p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{person.display_name}</h2>
           <p className="mt-1 text-sm text-muted">{lifeYears(person)}</p>
         </div>
-        <button type="button" className="rounded-full border border-border px-3 py-1 text-sm text-muted hover:bg-slate-50" onClick={onClose}>
+        <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-slate-50" onClick={onClose}>
           Close
         </button>
       </div>
 
       {canEdit ? (
-        <div className="mb-5 rounded-2xl bg-[#f5faf8] p-3">
-          <h3 className="mb-3 text-sm font-semibold text-slate-900">Grow from this person</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {relationshipActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <button
-                  key={action.mode}
-                  type="button"
-                  className="flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-accent hover:text-accent"
-                  onClick={() => onCreate(action.mode)}
-                >
-                  <Icon className="h-3.5 w-3.5 shrink-0" />
-                  {action.label}
-                </button>
-              );
-            })}
+        <div className="mb-5 rounded-lg border border-[#dfe9e7] bg-[#f5faf8] p-3">
+          <h3 className="text-sm font-semibold text-slate-900">Add a relationship</h3>
+          <div className="mt-3 space-y-4">
+            {relationshipActionGroups.map((group) => (
+              <div key={group.title} className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{group.title}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {group.actions.map((action) => {
+                    const Icon = action.icon;
+                    return (
+                      <button
+                        key={action.mode}
+                        type="button"
+                        className="flex min-h-10 items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+                        onClick={() => onCreate(action.mode)}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span className="min-w-0">{action.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
             {persons.length > 1 ? (
               <button
                 type="button"
-                className="col-span-2 flex items-center gap-2 rounded-xl border border-border bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-accent hover:text-accent"
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-left text-xs font-medium text-slate-700 transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
                 onClick={onConnectExisting}
               >
                 <Users className="h-3.5 w-3.5" />
@@ -690,7 +703,6 @@ function PersonDrawer({
               Partners: {selectedUnions.map((union) => partnerName(union, person.id, personById)).join(', ')}
             </p>
           ) : null}
-          {!parentCount ? <p className="mt-2 text-xs text-muted">Add a parent before adding siblings.</p> : null}
         </div>
       ) : null}
 
@@ -728,9 +740,59 @@ function PersonDrawer({
           <input type="checkbox" name="is_private" defaultChecked={Boolean(person.is_private)} disabled={!canEdit} />
           Private person
         </label>
-        {canEdit ? <Button className="w-full rounded-full">Save details</Button> : null}
+        {canEdit ? <Button className="w-full rounded-lg">Save details</Button> : null}
       </form>
     </aside>
+  );
+}
+
+function isSiblingMode(mode: string) {
+  return mode === 'sibling' || mode === 'brother' || mode === 'sister';
+}
+
+function SharedParentChoices({
+  targetPerson,
+  targetParents,
+  personById,
+}: {
+  targetPerson: Person | null;
+  targetParents: ParentChild[];
+  personById: Map<string, Person>;
+}) {
+  if (!targetParents.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-[#b9ccc9] bg-[#f6faf8] p-3 text-sm text-slate-700">
+        No known parent is attached to {targetPerson?.display_name ?? 'this person'}. The app will create a private "Unknown parent" placeholder and share it with both siblings.
+      </div>
+    );
+  }
+
+  return (
+    <fieldset className="rounded-lg border border-[#dfe9e7] bg-[#f8fbfa] p-3">
+      <legend className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Shared parents</legend>
+      <div className="mt-2 space-y-2">
+        {targetParents.map((relation) => {
+          const parent = personById.get(relation.parent_id);
+          const role = parentRoleLabel(relation.parent_role) ?? 'biological';
+
+          return (
+            <label key={relation.id} className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="shared_parent_ids"
+                value={relation.parent_id}
+                defaultChecked
+                className="mt-1 h-4 w-4 rounded border-border text-accent"
+              />
+              <span>
+                <span className="font-medium text-slate-900">{parent?.display_name ?? 'Unknown parent'}</span>
+                <span className="text-muted"> ({role})</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
@@ -754,15 +816,16 @@ function PersonCreateDialog({
   onClose: () => void;
 }) {
   const targetId = 'targetId' in dialog ? dialog.targetId : undefined;
-  const targetPerson = targetId ? personById.get(targetId) : null;
+  const targetPerson = targetId ? personById.get(targetId) ?? null : null;
   const targetUnions = targetId ? unions.filter((union) => union.partner1_id === targetId || union.partner2_id === targetId) : [];
   const targetParents = targetId ? parentChild.filter((relation) => relation.child_id === targetId) : [];
-  const defaultGender = dialog.mode === 'father' ? 'male' : dialog.mode === 'mother' ? 'female' : '';
-  const siblingWithoutParents = dialog.mode === 'sibling' && targetId && !targetParents.length;
+  const defaultGender = dialog.mode === 'father' || dialog.mode === 'brother' ? 'male' : dialog.mode === 'mother' || dialog.mode === 'sister' ? 'female' : '';
+  const isSiblingDialog = isSiblingMode(dialog.mode);
+  const [existingRelation, setExistingRelation] = useState<string>('parent');
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-0 backdrop-blur-sm md:place-items-center md:p-4">
-      <div className="w-full max-w-xl rounded-t-[28px] bg-white p-5 shadow-2xl md:rounded-[28px]">
+      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-xl bg-white p-5 shadow-2xl md:rounded-lg">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{dialogTitles[dialog.mode]}</h2>
@@ -770,7 +833,7 @@ function PersonCreateDialog({
               {targetPerson ? `Connected to ${targetPerson.display_name}.` : 'Start with any person. You can add details later.'}
             </p>
           </div>
-          <button type="button" className="rounded-full border border-border px-3 py-1 text-sm text-muted hover:bg-slate-50" onClick={onClose}>
+          <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-slate-50" onClick={onClose}>
             Close
           </button>
         </div>
@@ -782,7 +845,7 @@ function PersonCreateDialog({
             <input type="hidden" name="target_id" value={targetId} />
             <label className="block text-sm font-medium text-slate-700">
               Existing person
-              <select name="existing_person_id" required className="mt-1 w-full rounded-2xl border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
+              <select name="existing_person_id" required className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
                 {persons
                   .filter((person) => person.id !== targetId)
                   .map((person) => (
@@ -792,13 +855,23 @@ function PersonCreateDialog({
                   ))}
               </select>
             </label>
-            <SelectField
-              label="Relationship to selected person"
-              name="existing_relation"
-              defaultValue="parent"
-              options={['parent', 'child', 'partner', 'spouse', 'ex_partner', 'sibling', 'adoptive_parent', 'foster_parent', 'step_parent', 'guardian']}
-            />
-            <Button className="w-full rounded-full">Connect person</Button>
+            <label className="block text-sm font-medium text-slate-700">
+              Relationship to selected person
+              <select
+                name="existing_relation"
+                value={existingRelation}
+                onChange={(event) => setExistingRelation(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent"
+              >
+                {existingRelationshipOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {isSiblingMode(existingRelation) ? <SharedParentChoices targetPerson={targetPerson} targetParents={targetParents} personById={personById} /> : null}
+            <Button className="w-full rounded-lg">Connect person</Button>
           </form>
         ) : (
           <form action={action} className="space-y-3" onSubmit={onClose}>
@@ -818,7 +891,7 @@ function PersonCreateDialog({
             {dialog.mode === 'child' && targetUnions.length ? (
               <label className="block text-sm font-medium text-slate-700">
                 Child belongs to
-                <select name="union_id" className="mt-1 w-full rounded-2xl border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
+                <select name="union_id" className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
                   <option value="">Only {targetPerson?.display_name}</option>
                   {targetUnions.map((union) => (
                     <option key={union.id} value={union.id}>
@@ -828,10 +901,8 @@ function PersonCreateDialog({
                 </select>
               </label>
             ) : null}
-            {siblingWithoutParents ? (
-              <p className="rounded-2xl bg-[#f6faf8] p-3 text-sm text-slate-700">Add at least one parent to {targetPerson?.display_name} before creating a sibling.</p>
-            ) : null}
-            <Button className="w-full rounded-full" disabled={Boolean(siblingWithoutParents)}>
+            {isSiblingDialog ? <SharedParentChoices targetPerson={targetPerson} targetParents={targetParents} personById={personById} /> : null}
+            <Button className="w-full rounded-lg">
               {dialog.mode === 'first_person' ? 'Create first bubble' : 'Create person and connect'}
             </Button>
           </form>
@@ -865,7 +936,7 @@ function Field({
         required={required}
         autoFocus={autoFocus}
         disabled={disabled}
-        className="mt-1 w-full rounded-2xl border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="mt-1 min-h-11 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
       />
     </label>
   );
@@ -891,7 +962,7 @@ function SelectField({
         name={name}
         defaultValue={defaultValue}
         disabled={disabled}
-        className="mt-1 w-full rounded-2xl border border-border bg-white px-3 py-3 text-sm capitalize outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="mt-1 min-h-11 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm capitalize outline-none transition focus:border-accent disabled:bg-slate-50"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -924,7 +995,7 @@ function TextAreaField({
         defaultValue={defaultValue}
         rows={rows}
         disabled={disabled}
-        className="mt-1 w-full resize-none rounded-2xl border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="mt-1 w-full resize-none rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
       />
     </label>
   );

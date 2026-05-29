@@ -6,6 +6,42 @@
   color-scheme: light;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: #eef4f2;
+}
+
 body {
   @apply bg-background text-foreground antialiased;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+.react-flow__controls {
+  border-radius: 12px;
+  border: 1px solid #d9e0df;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  border-bottom-color: #d9e0df;
+  color: #334155;
+}
+
+.react-flow__minimap {
+  border: 1px solid #d9e0df;
+  border-radius: 12px;
+  overflow: hidden;
 }

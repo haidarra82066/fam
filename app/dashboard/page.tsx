@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { CreateTreeModal } from '@/components/dashboard/create-tree-modal';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser, parseForm, writeAuditLog, z } from '@/lib/security';
+import { GitBranch, Users } from 'lucide-react';
 
 const createTreeSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -32,10 +33,65 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const treeIds = memberships?.map((m) => m.tree_id) ?? [];
   const { data: trees } = treeIds.length ? await supabase.from('family_trees').select('id, name, description, updated_at').in('id', treeIds).order('updated_at', { ascending: false }) : { data: [] as any[] };
 
-  return <SiteShell><div className='space-y-6'>
-    {error ? <Card className='p-4 text-sm text-red-600'>Action failed: {error}.</Card> : null}
-    <div><h1 className='text-3xl font-semibold tracking-tight'>Dashboard</h1><p className='mt-1 text-sm text-muted'>Manage your trees.</p></div>
-    <Card className='flex items-center justify-between p-6'><div><h2 className='font-semibold'>Family trees</h2></div><CreateTreeModal action={createTree} /></Card>
-    {!trees?.length ? <Card className='p-6 text-sm text-muted'>No trees yet.</Card> : <div className='grid gap-4 sm:grid-cols-2'>{trees.map((tree:any)=><Card key={tree.id} className='p-5 space-y-2'><h2 className='text-lg font-semibold'>{tree.name}</h2><p className='text-sm text-muted'>{tree.description || 'No description'}</p><p className='text-xs text-muted'>Role: {memberships?.find((m)=>m.tree_id===tree.id)?.role}</p><Link href={`/tree/${tree.id}`}><Button>Open</Button></Link></Card>)}</div>}
-  </div></SiteShell>;
+  return (
+    <SiteShell>
+      <div className="space-y-6">
+        {error ? <Card className="border-red-200 bg-red-50 p-4 text-sm text-red-700">Action failed: {error}.</Card> : null}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Dashboard</h1>
+            <p className="mt-1 text-sm text-muted">Open a tree, create a new workspace, or continue a shared family project.</p>
+          </div>
+          <CreateTreeModal action={createTree} />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Card className="flex items-center gap-3 p-4">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#e7f1ef] text-accent"><GitBranch className="h-5 w-5" /></span>
+            <div>
+              <p className="text-2xl font-semibold text-slate-950">{trees?.length ?? 0}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Trees</p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-3 p-4">
+            <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#fff0ed] text-[#b9685f]"><Users className="h-5 w-5" /></span>
+            <div>
+              <p className="text-2xl font-semibold text-slate-950">{memberships?.length ?? 0}</p>
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted">Active memberships</p>
+            </div>
+          </Card>
+        </div>
+
+        {!trees?.length ? (
+          <Card className="grid min-h-56 place-items-center p-6 text-center">
+            <div className="max-w-sm">
+              <h2 className="text-lg font-semibold text-slate-950">No trees yet</h2>
+              <p className="mt-2 text-sm text-muted">Create your first family tree after account approval.</p>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {trees.map((tree: any) => {
+              const role = memberships?.find((membership) => membership.tree_id === tree.id)?.role;
+
+              return (
+                <Card key={tree.id} className="flex min-h-48 flex-col justify-between p-5">
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <h2 className="text-lg font-semibold text-slate-950">{tree.name}</h2>
+                      <span className="rounded-md border border-border bg-[#f8fbfa] px-2 py-1 text-xs font-medium capitalize text-muted">{role}</span>
+                    </div>
+                    <p className="line-clamp-3 text-sm leading-6 text-muted">{tree.description || 'No description yet.'}</p>
+                  </div>
+                  <Link className="mt-5" href={`/tree/${tree.id}`}>
+                    <Button className="w-full">Open tree</Button>
+                  </Link>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </SiteShell>
+  );
 }

@@ -4,10 +4,12 @@ export type ParentRole =
   | 'foster'
   | 'step'
   | 'guardian'
+  | 'donor'
+  | 'surrogate'
   | 'unknown'
   | (string & {});
 
-export type PartnerRelationshipType = 'partner' | 'spouse' | 'ex_partner';
+export type PartnerRelationshipType = 'partner' | 'spouse' | 'ex_partner' | 'divorced' | 'separated' | 'co_parent' | 'unknown';
 
 export type FamilyPerson = {
   id: string;
@@ -149,6 +151,26 @@ export const relationshipEdgeStyles = {
     strokeWidth: 1.5,
     strokeDasharray: '6 4',
   },
+  divorced: {
+    stroke: '#b98983',
+    strokeWidth: 1.5,
+    strokeDasharray: '6 4',
+  },
+  separated: {
+    stroke: '#b98983',
+    strokeWidth: 1.5,
+    strokeDasharray: '10 4',
+  },
+  co_parent: {
+    stroke: '#729da3',
+    strokeWidth: 1.7,
+    strokeDasharray: '2 3',
+  },
+  unknown_partner: {
+    stroke: '#9fb6b3',
+    strokeWidth: 1.5,
+    strokeDasharray: '5 4',
+  },
   biological_parent_child: {
     stroke: '#8daaa7',
     strokeWidth: 2,
@@ -172,6 +194,16 @@ export const relationshipEdgeStyles = {
     stroke: '#8aa6a3',
     strokeWidth: 1.5,
     strokeDasharray: '3 4',
+  },
+  donor_parent_child: {
+    stroke: '#8aa6a3',
+    strokeWidth: 1.5,
+    strokeDasharray: '2 2',
+  },
+  surrogate_parent_child: {
+    stroke: '#8aa6a3',
+    strokeWidth: 1.5,
+    strokeDasharray: '10 3 2 3',
   },
   unknown_parent_child: {
     stroke: '#9fb6b3',
@@ -226,7 +258,11 @@ function dominantParentRole(roles: ParentRole[]): ParentRole {
 
 export function normalizeUnionType(unionType?: string | null): PartnerRelationshipType {
   if (unionType === 'married') return 'spouse';
-  if (unionType === 'ex_partner' || unionType === 'divorced' || unionType === 'separated') return 'ex_partner';
+  if (unionType === 'ex_partner') return 'ex_partner';
+  if (unionType === 'divorced') return 'divorced';
+  if (unionType === 'separated') return 'separated';
+  if (unionType === 'co_parent') return 'co_parent';
+  if (unionType === 'unknown') return 'unknown';
   return 'partner';
 }
 
@@ -266,11 +302,14 @@ export function edgeStyleForParentRole(role?: ParentRole | null) {
   if (normalized === 'foster') return relationshipEdgeStyles.foster_parent_child;
   if (normalized === 'step') return relationshipEdgeStyles.step_parent_child;
   if (normalized === 'guardian') return relationshipEdgeStyles.guardian_parent_child;
+  if (normalized === 'donor') return relationshipEdgeStyles.donor_parent_child;
+  if (normalized === 'surrogate') return relationshipEdgeStyles.surrogate_parent_child;
   if (normalized === 'biological') return relationshipEdgeStyles.biological_parent_child;
   return relationshipEdgeStyles.unknown_parent_child;
 }
 
 export function edgeStyleForPartnerType(type: PartnerRelationshipType) {
+  if (type === 'unknown') return relationshipEdgeStyles.unknown_partner;
   return relationshipEdgeStyles[type];
 }
 

@@ -19,10 +19,21 @@ async function acceptInvite(formData: FormData) { 'use server';
 export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const { user, profile } = await getCurrentUserWithProfile();
-  return <SiteShell><Card className='mx-auto max-w-xl space-y-3 p-6'>
-    <h1 className='text-2xl font-semibold'>Family tree invitation</h1>
-    {!user ? <p className='text-sm text-muted'>You need an account. Sign up or log in to accept this invitation.</p> : null}
-    {user && profile?.status !== 'approved' ? <p className='text-sm text-amber-600'>Your account is pending approval. We will hold access until approved.</p> : null}
-    <form action={acceptInvite}><input type='hidden' name='token' value={token} /><Button>Accept invitation</Button></form>
-  </Card></SiteShell>;
+  return (
+    <SiteShell>
+      <div className="grid min-h-[calc(100dvh-9rem)] w-full grid-cols-[minmax(0,1fr)] place-items-center">
+        <Card className="w-[90vw] max-w-[90vw] space-y-4 p-6 sm:w-full sm:max-w-xl">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Family tree invitation</h1>
+            {!user ? <p className="mt-1 text-sm text-muted">You need an account. Sign up or log in to accept this invitation.</p> : null}
+            {user && profile?.status !== 'approved' ? <p className="mt-1 text-sm text-amber-700">Your account is pending approval. We will hold access until approved.</p> : null}
+          </div>
+          <form action={acceptInvite}>
+            <input type="hidden" name="token" value={token} />
+            <Button className="w-full sm:w-auto">Accept invitation</Button>
+          </form>
+        </Card>
+      </div>
+    </SiteShell>
+  );
 }

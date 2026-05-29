@@ -6,9 +6,22 @@ export type ParentChildType =
   | 'step'
   | 'foster'
   | 'guardian'
+  | 'donor'
+  | 'surrogate'
   | 'unknown';
 
-export type UnionStatus = 'partner' | 'spouse' | 'ex-partner' | 'divorced' | 'unknown';
+export type UnionStatus =
+  | 'partner'
+  | 'partnered'
+  | 'spouse'
+  | 'married'
+  | 'ex-partner'
+  | 'ex_partner'
+  | 'divorced'
+  | 'separated'
+  | 'co-parent'
+  | 'co_parent'
+  | 'unknown';
 
 export interface Person {
   id: string;

@@ -44,11 +44,19 @@ const createPersonSchema = z.object({
     'partner',
     'spouse',
     'ex_partner',
+    'divorced_partner',
+    'co_parent',
+    'separated_partner',
+    'unknown_partner',
     'sibling',
+    'brother',
+    'sister',
     'adoptive_parent',
     'step_parent',
     'foster_parent',
     'guardian',
+    'donor_parent',
+    'surrogate_parent',
   ]),
   display_name: z.string().trim().min(1).max(120),
   gender: optionalText(60),
@@ -62,7 +70,28 @@ const connectExistingSchema = z.object({
   tree_id: z.string().uuid(),
   target_id: z.string().uuid(),
   existing_person_id: z.string().uuid(),
-  existing_relation: z.enum(['parent', 'child', 'partner', 'spouse', 'ex_partner', 'sibling', 'adoptive_parent', 'foster_parent', 'step_parent', 'guardian']),
+  existing_relation: z.enum([
+    'parent',
+    'child',
+    'father',
+    'mother',
+    'partner',
+    'spouse',
+    'ex_partner',
+    'divorced_partner',
+    'co_parent',
+    'separated_partner',
+    'unknown_partner',
+    'sibling',
+    'brother',
+    'sister',
+    'adoptive_parent',
+    'foster_parent',
+    'step_parent',
+    'guardian',
+    'donor_parent',
+    'surrogate_parent',
+  ]),
 });
 
 const updatePersonSchema = z.object({
@@ -111,6 +140,8 @@ function parentRoleForMode(mode: string) {
   if (mode === 'step_parent') return 'step';
   if (mode === 'foster_parent') return 'foster';
   if (mode === 'guardian') return 'guardian';
+  if (mode === 'donor_parent') return 'donor';
+  if (mode === 'surrogate_parent') return 'surrogate';
   return 'biological';
 }
 
@@ -118,6 +149,8 @@ function defaultGenderForMode(mode: string, gender?: string) {
   if (gender) return gender;
   if (mode === 'father') return 'male';
   if (mode === 'mother') return 'female';
+  if (mode === 'brother') return 'male';
+  if (mode === 'sister') return 'female';
   return null;
 }
 
@@ -173,7 +206,7 @@ async function createUnion(input: {
   treeId: string;
   partner1Id: string;
   partner2Id: string;
-  unionType: 'partnered' | 'married' | 'ex_partner';
+  unionType: 'partnered' | 'married' | 'ex_partner' | 'divorced' | 'co_parent' | 'separated' | 'unknown';
 }) {
   if (input.partner1Id === input.partner2Id) return;
 
@@ -205,6 +238,15 @@ type SiblingParentLink = {
   union_id: string | null;
 };
 
+function selectedSharedParentIds(formData: FormData) {
+  return new Set(
+    formData
+      .getAll('shared_parent_ids')
+      .map((value) => String(value))
+      .filter(Boolean),
+  );
+}
+
 async function getParentLinksForChild(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   treeId: string;
@@ -223,13 +265,49 @@ async function getParentLinksForChild(input: {
 async function copySiblingParents(input: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   treeId: string;
+  actorId: string;
   targetId: string;
   siblingId: string;
   parentLinks?: SiblingParentLink[];
+  selectedParentIds?: Set<string>;
 }) {
-  const parents = input.parentLinks ?? (await getParentLinksForChild({ supabase: input.supabase, treeId: input.treeId, childId: input.targetId }));
+  const allParents = input.parentLinks ?? (await getParentLinksForChild({ supabase: input.supabase, treeId: input.treeId, childId: input.targetId }));
+  const parents = input.selectedParentIds?.size
+    ? allParents.filter((parent) => input.selectedParentIds?.has(parent.parent_id))
+    : allParents;
 
-  if (!parents.length) redirect(`/tree/${input.treeId}?error=add_parent_before_sibling`);
+  if (!parents.length) {
+    const { data: placeholder, error } = await input.supabase
+      .from('persons')
+      .insert({
+        tree_id: input.treeId,
+        display_name: 'Unknown parent',
+        living_status: 'unknown',
+        is_private: true,
+        created_by: input.actorId,
+        updated_by: input.actorId,
+      })
+      .select('id')
+      .single();
+
+    if (error || !placeholder) redirect(`/tree/${input.treeId}?error=sibling_failed`);
+
+    await addParentChild({
+      supabase: input.supabase,
+      treeId: input.treeId,
+      parentId: placeholder.id,
+      childId: input.targetId,
+      parentRole: 'unknown',
+    });
+    await addParentChild({
+      supabase: input.supabase,
+      treeId: input.treeId,
+      parentId: placeholder.id,
+      childId: input.siblingId,
+      parentRole: 'unknown',
+    });
+    return;
+  }
 
   await Promise.all(
     parents.map((parent) =>
@@ -265,9 +343,8 @@ async function createPersonOrRelative(formData: FormData) {
   }
 
   let siblingParentLinks: SiblingParentLink[] | undefined;
-  if (parsed.mode === 'sibling' && parsed.target_id) {
+  if (['sibling', 'brother', 'sister'].includes(parsed.mode) && parsed.target_id) {
     siblingParentLinks = await getParentLinksForChild({ supabase, treeId: parsed.tree_id, childId: parsed.target_id });
-    if (!siblingParentLinks.length) redirect(`/tree/${parsed.tree_id}?error=add_parent_before_sibling`);
   }
 
   const { data: person, error } = await supabase.from('persons').insert(personPayload(parsed, user.id)).select('id').single();
@@ -276,7 +353,7 @@ async function createPersonOrRelative(formData: FormData) {
   const targetId = parsed.target_id;
 
   if (targetId) {
-    if (['father', 'mother', 'parent', 'adoptive_parent', 'step_parent', 'foster_parent', 'guardian'].includes(parsed.mode)) {
+    if (['father', 'mother', 'parent', 'adoptive_parent', 'step_parent', 'foster_parent', 'guardian', 'donor_parent', 'surrogate_parent'].includes(parsed.mode)) {
       await addParentChild({
         supabase,
         treeId: parsed.tree_id,
@@ -321,23 +398,38 @@ async function createPersonOrRelative(formData: FormData) {
       }
     }
 
-    if (['partner', 'spouse', 'ex_partner'].includes(parsed.mode)) {
+    if (['partner', 'spouse', 'ex_partner', 'divorced_partner', 'co_parent', 'separated_partner', 'unknown_partner'].includes(parsed.mode)) {
       await createUnion({
         supabase,
         treeId: parsed.tree_id,
         partner1Id: targetId,
         partner2Id: person.id,
-        unionType: parsed.mode === 'spouse' ? 'married' : parsed.mode === 'ex_partner' ? 'ex_partner' : 'partnered',
+        unionType:
+          parsed.mode === 'spouse'
+            ? 'married'
+            : parsed.mode === 'ex_partner'
+              ? 'ex_partner'
+              : parsed.mode === 'divorced_partner'
+                ? 'divorced'
+              : parsed.mode === 'co_parent'
+                ? 'co_parent'
+                : parsed.mode === 'separated_partner'
+                  ? 'separated'
+                  : parsed.mode === 'unknown_partner'
+                    ? 'unknown'
+                    : 'partnered',
       });
     }
 
-    if (parsed.mode === 'sibling') {
+    if (['sibling', 'brother', 'sister'].includes(parsed.mode)) {
       await copySiblingParents({
         supabase,
         treeId: parsed.tree_id,
+        actorId: user.id,
         targetId,
         siblingId: person.id,
         parentLinks: siblingParentLinks,
+        selectedParentIds: selectedSharedParentIds(formData),
       });
     }
   }
@@ -375,7 +467,7 @@ async function connectExistingPerson(formData: FormData) {
 
   if (!existingPerson) redirect(`/tree/${parsed.tree_id}?error=missing_person`);
 
-  if (['parent', 'adoptive_parent', 'foster_parent', 'step_parent', 'guardian'].includes(parsed.existing_relation)) {
+  if (['parent', 'father', 'mother', 'adoptive_parent', 'foster_parent', 'step_parent', 'guardian', 'donor_parent', 'surrogate_parent'].includes(parsed.existing_relation)) {
     await addParentChild({
       supabase,
       treeId: parsed.tree_id,
@@ -394,22 +486,37 @@ async function connectExistingPerson(formData: FormData) {
     });
   }
 
-  if (parsed.existing_relation === 'partner' || parsed.existing_relation === 'spouse' || parsed.existing_relation === 'ex_partner') {
+  if (['partner', 'spouse', 'ex_partner', 'divorced_partner', 'co_parent', 'separated_partner', 'unknown_partner'].includes(parsed.existing_relation)) {
     await createUnion({
       supabase,
       treeId: parsed.tree_id,
       partner1Id: parsed.target_id,
       partner2Id: parsed.existing_person_id,
-      unionType: parsed.existing_relation === 'spouse' ? 'married' : parsed.existing_relation === 'ex_partner' ? 'ex_partner' : 'partnered',
+      unionType:
+        parsed.existing_relation === 'spouse'
+          ? 'married'
+          : parsed.existing_relation === 'ex_partner'
+            ? 'ex_partner'
+            : parsed.existing_relation === 'divorced_partner'
+              ? 'divorced'
+            : parsed.existing_relation === 'co_parent'
+              ? 'co_parent'
+              : parsed.existing_relation === 'separated_partner'
+                ? 'separated'
+                : parsed.existing_relation === 'unknown_partner'
+                  ? 'unknown'
+                  : 'partnered',
     });
   }
 
-  if (parsed.existing_relation === 'sibling') {
+  if (['sibling', 'brother', 'sister'].includes(parsed.existing_relation)) {
     await copySiblingParents({
       supabase,
       treeId: parsed.tree_id,
+      actorId: user.id,
       targetId: parsed.target_id,
       siblingId: parsed.existing_person_id,
+      selectedParentIds: selectedSharedParentIds(formData),
     });
   }
 
@@ -519,19 +626,23 @@ export default async function TreePage({ params, searchParams }: { params: Promi
   const canEditTree = contributorRoles.includes(membership.role as (typeof contributorRoles)[number]);
 
   const errorMessages: Record<string, string> = {
-    add_parent_before_sibling: 'Add at least one parent before adding a sibling.',
+    sibling_failed: 'The sibling relationship could not be created.',
+    relationship_failed: 'The relationship could not be saved.',
+    union_failed: 'The partner relationship could not be saved.',
+    person_failed: 'The person could not be created.',
+    not_authorized: 'You do not have permission to do that.',
   };
 
   return (
     <SiteShell variant="workspace">
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <div className="shrink-0 rounded-[24px] border border-border bg-white/80 px-4 py-3 shadow-soft backdrop-blur">
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="shrink-0 rounded-lg border border-border bg-white/90 px-4 py-3 shadow-soft backdrop-blur">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">{tree.name}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{tree.name}</h1>
             <p className="mt-1 max-w-2xl text-sm text-muted">{tree.description || 'Build the family map one person and one relationship at a time.'}</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <a href={`/tree/${treeId}/members`}>
               <Button variant="outline">Membership</Button>
             </a>
@@ -546,7 +657,7 @@ export default async function TreePage({ params, searchParams }: { params: Promi
           </div>
         ) : null}
 
-        <div className="min-h-[520px] flex-1">
+        <div className="min-h-[620px] flex-1 md:min-h-0">
           <FamilyTreeCanvas
             persons={persons ?? []}
             unions={unions ?? []}
