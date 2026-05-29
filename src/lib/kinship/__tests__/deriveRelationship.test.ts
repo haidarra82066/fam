@@ -41,7 +41,7 @@ const mk = (): KinshipInput => ({
     { id: 'p19', parent_id: 'sis', child_id: 'niec', relation_type: 'biological' },
     { id: 'p20', parent_id: 'sil', child_id: 'niec', relation_type: 'biological' },
     { id: 'p21', parent_id: 'c1', child_id: 'c1r', relation_type: 'biological' },
-    { id: 'p22', parent_id: 'stepmom', child_id: 'stepkid', relation_type: 'biological' },
+    { id: 'p22', parent_id: 'sp', child_id: 'stepkid', relation_type: 'biological' },
   ],
 });
 

@@ -14,6 +14,16 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import {
+  FAMILY_LAYOUT,
+  buildFamilyGraph,
+  edgeStyleForFamilyEdge,
+  layoutFamilyGraph,
+  parentRoleLabel,
+  relationshipsFromRows,
+  type FamilyGraphEdge,
+  type FamilyPerson,
+} from '@/src/lib/kinship/familyGraph';
 
 const ReactFlow = (ReactFlowLib as any).ReactFlow;
 const Background = (ReactFlowLib as any).Background;
@@ -93,7 +103,7 @@ type Props = {
   updatePersonAction: (formData: FormData) => void | Promise<void>;
 };
 
-const nodeTypes = { personBubble: PersonBubbleNode };
+const nodeTypes = { personBubble: PersonBubbleNode, familyJunction: FamilyJunctionNode };
 
 const relationshipActions: Array<{ mode: RelationshipMode; label: string; icon: typeof UserPlus }> = [
   { mode: 'father', label: 'Add father', icon: UserPlus },
@@ -172,66 +182,16 @@ function createRelationshipIndexes(parentChild: ParentChild[]) {
   return { parentsByChild, childrenByParent };
 }
 
-function buildLayout(persons: Person[], parentChild: ParentChild[], unions: Union[]) {
-  const ids = new Set(persons.map((person) => person.id));
-  const { parentsByChild, childrenByParent } = createRelationshipIndexes(parentChild);
-  const depths = new Map<string, number>();
-  const roots = persons.filter((person) => !(parentsByChild.get(person.id)?.length));
-  const queue = (roots.length ? roots : persons).map((person) => person.id);
+function buildPositionedGraph(persons: Person[], parentChild: ParentChild[], unions: Union[]) {
+  const familyPersons: FamilyPerson[] = persons.map((person, index) => ({
+    id: person.id,
+    displayName: person.display_name,
+    gender: person.gender,
+    sortIndex: index,
+  }));
+  const relationships = relationshipsFromRows({ unions, parentChild });
 
-  for (const root of queue) depths.set(root, 0);
-
-  for (let index = 0; index < queue.length; index += 1) {
-    const id = queue[index];
-    const depth = depths.get(id) ?? 0;
-    for (const child of childrenByParent.get(id) ?? []) {
-      const nextDepth = depth + 1;
-      if (!depths.has(child.child_id) || (depths.get(child.child_id) ?? 0) < nextDepth) {
-        depths.set(child.child_id, nextDepth);
-        queue.push(child.child_id);
-      }
-    }
-  }
-
-  for (const person of persons) {
-    if (!depths.has(person.id)) depths.set(person.id, 0);
-  }
-
-  for (let pass = 0; pass < 4; pass += 1) {
-    for (const union of unions) {
-      if (!union.partner2_id || !ids.has(union.partner1_id) || !ids.has(union.partner2_id)) continue;
-      const sharedDepth = Math.min(depths.get(union.partner1_id) ?? 0, depths.get(union.partner2_id) ?? 0);
-      depths.set(union.partner1_id, sharedDepth);
-      depths.set(union.partner2_id, sharedDepth);
-    }
-  }
-
-  const rows = new Map<number, Person[]>();
-  for (const person of persons) {
-    const row = rows.get(depths.get(person.id) ?? 0) ?? [];
-    row.push(person);
-    rows.set(depths.get(person.id) ?? 0, row);
-  }
-
-  const positions = new Map<string, { x: number; y: number }>();
-  const rowGap = 210;
-  const colGap = 290;
-
-  Array.from(rows.entries())
-    .sort(([a], [b]) => a - b)
-    .forEach(([depth, row]) => {
-      row
-        .sort((a, b) => a.display_name.localeCompare(b.display_name))
-        .forEach((person, index) => {
-          const rowWidth = (row.length - 1) * colGap;
-          positions.set(person.id, {
-            x: index * colGap - rowWidth / 2,
-            y: depth * rowGap,
-          });
-        });
-    });
-
-  return positions;
+  return layoutFamilyGraph(buildFamilyGraph(familyPersons, relationships));
 }
 
 function relationshipLabel(personId: string, focusId: string | null, persons: Person[], parentChild: ParentChild[], unions: Union[]) {
@@ -267,7 +227,7 @@ function relationshipLabel(personId: string, focusId: string | null, persons: Pe
 
   if (union) {
     if (union.union_type === 'married') return 'spouse';
-    if (union.union_type === 'ex_partner') return 'ex-partner';
+    if (union.union_type === 'ex_partner' || union.union_type === 'divorced' || union.union_type === 'separated') return 'ex-partner';
     return 'partner';
   }
 
@@ -285,6 +245,57 @@ function relationshipLabel(personId: string, focusId: string | null, persons: Pe
   }
 
   return 'family member';
+}
+
+function labelForGraphEdge(edge: FamilyGraphEdge) {
+  if (edge.kind === 'partner') {
+    if (edge.relationshipType === 'spouse') return 'spouse';
+    if (edge.relationshipType === 'ex_partner') return 'ex-partner';
+    return 'partner';
+  }
+
+  if (edge.kind === 'parent_to_family') return parentRoleLabel(edge.parentRole);
+
+  const nonBiologicalRole = edge.parentRoles.find((role) => role !== 'biological' && role !== 'unknown');
+  const unknownRole = edge.parentRoles.find((role) => role === 'unknown');
+  return parentRoleLabel(nonBiologicalRole ?? unknownRole);
+}
+
+function nodeCenter(node: { position: { x: number; y: number }; width: number; height: number }) {
+  return {
+    x: node.position.x + node.width / 2,
+    y: node.position.y + node.height / 2,
+  };
+}
+
+function sideHandles(source: { x: number; y: number }, target: { x: number; y: number }) {
+  if (source.x <= target.x) {
+    return { sourceHandle: 'right-source', targetHandle: 'left-target' };
+  }
+
+  return { sourceHandle: 'left-source', targetHandle: 'right-target' };
+}
+
+function reactFlowHandlesForEdge(
+  edge: FamilyGraphEdge,
+  geometryById: Map<string, { position: { x: number; y: number }; width: number; height: number }>,
+) {
+  const sourceNode = geometryById.get(edge.sourceId);
+  const targetNode = geometryById.get(edge.targetId);
+  if (!sourceNode || !targetNode) return {};
+
+  const source = nodeCenter(sourceNode);
+  const target = nodeCenter(targetNode);
+
+  if (edge.kind === 'family_to_child') {
+    return { sourceHandle: 'bottom-source', targetHandle: 'top-target', type: 'smoothstep' };
+  }
+
+  if (edge.kind === 'parent_to_family' && Math.abs(source.x - target.x) < 18) {
+    return { sourceHandle: 'bottom-source', targetHandle: 'top-target', type: 'smoothstep' };
+  }
+
+  return { ...sideHandles(source, target), type: 'straight' };
 }
 
 function PersonBubbleNode({ data }: { data: any }) {
@@ -306,10 +317,12 @@ function PersonBubbleNode({ data }: { data: any }) {
         !data.searchMatch && 'opacity-30',
       )}
     >
-      <Handle type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-transparent" />
-      <Handle type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-transparent" />
-      <Handle type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-transparent" />
-      <Handle type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="top-target" type="target" position={Position.Top} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="bottom-source" type="source" position={Position.Bottom} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="left-source" type="source" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="left-target" type="target" position={Position.Left} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="right-source" type="source" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-transparent" />
+      <Handle id="right-target" type="target" position={Position.Right} className="!h-2 !w-2 !border-0 !bg-transparent" />
 
       <div className="flex items-start gap-3">
         <div
@@ -339,6 +352,19 @@ function PersonBubbleNode({ data }: { data: any }) {
   );
 }
 
+function FamilyJunctionNode() {
+  return (
+    <div className="h-3.5 w-3.5 rounded-full border border-[#8daaa7] bg-white shadow-[0_4px_12px_rgba(79,141,149,0.16)]">
+      <Handle id="top-target" type="target" position={Position.Top} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+      <Handle id="bottom-source" type="source" position={Position.Bottom} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+      <Handle id="left-source" type="source" position={Position.Left} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+      <Handle id="left-target" type="target" position={Position.Left} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+      <Handle id="right-source" type="source" position={Position.Right} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+      <Handle id="right-target" type="target" position={Position.Right} className="!h-1.5 !w-1.5 !border-0 !bg-transparent" />
+    </div>
+  );
+}
+
 export function FamilyTreeCanvas(props: Props) {
   return (
     <ReactFlowProvider>
@@ -354,7 +380,14 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   const [dialog, setDialog] = useState<CreateDialog | null>(null);
   const personById = useMemo(() => new Map(persons.map((person) => [person.id, person])), [persons]);
   const { parentsByChild } = useMemo(() => createRelationshipIndexes(parentChild), [parentChild]);
-  const positions = useMemo(() => buildLayout(persons, parentChild, unions), [persons, parentChild, unions]);
+  const positionedGraph = useMemo(() => buildPositionedGraph(persons, parentChild, unions), [parentChild, persons, unions]);
+  const personPositions = useMemo(() => new Map(positionedGraph.personNodes.map((node) => [node.id, node.position])), [positionedGraph]);
+  const geometryById = useMemo(() => {
+    const geometry = new Map<string, { position: { x: number; y: number }; width: number; height: number }>();
+    for (const node of positionedGraph.personNodes) geometry.set(node.id, node);
+    for (const node of positionedGraph.familyUnitNodes) geometry.set(node.id, node);
+    return geometry;
+  }, [positionedGraph]);
   const selectedPerson = selectedPersonId ? personById.get(selectedPersonId) ?? null : null;
   const searchValue = query.trim().toLowerCase();
 
@@ -367,16 +400,23 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
     }
   }, [personById, persons, selectedPersonId]);
 
+  useEffect(() => {
+    if (!persons.length) return;
+    const timer = window.setTimeout(() => fitView({ padding: 0.2, duration: 350 }), 0);
+    return () => window.clearTimeout(timer);
+  }, [fitView, persons.length, positionedGraph]);
+
   const nodes = useMemo(
-    () =>
-      persons.map((person) => {
-        const position = positions.get(person.id) ?? { x: 0, y: 0 };
+    () => [
+      ...positionedGraph.personNodes.map((graphNode) => {
+        const person = personById.get(graphNode.id);
+        if (!person) return null;
         const searchMatch = !searchValue || person.display_name.toLowerCase().includes(searchValue);
 
         return {
           id: person.id,
           type: 'personBubble',
-          position,
+          position: graphNode.position,
           data: {
             person,
             selected: person.id === selectedPersonId,
@@ -386,37 +426,42 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
           },
         };
       }),
-    [parentChild, persons, positions, searchValue, selectedPersonId, unions],
+      ...positionedGraph.familyUnitNodes.map((graphNode) => ({
+        id: graphNode.id,
+        type: 'familyJunction',
+        position: graphNode.position,
+        selectable: false,
+        focusable: false,
+        draggable: false,
+        data: { familyUnit: graphNode.familyUnit },
+      })),
+    ].filter(Boolean),
+    [parentChild, personById, persons, positionedGraph, searchValue, selectedPersonId, unions],
   );
 
-  const edges = useMemo(() => {
-    const parentEdges = parentChild.map((relation) => ({
-      id: `parent-${relation.id}`,
-      source: relation.parent_id,
-      target: relation.child_id,
-      type: 'smoothstep',
-      label: relation.parent_role && relation.parent_role !== 'biological' ? relation.parent_role.replace('_', ' ') : undefined,
-      markerEnd: { type: 'arrowclosed', color: '#88a7a5' },
-      style: { stroke: '#9bb7b5', strokeWidth: 1.7 },
-      labelStyle: { fill: '#667b78', fontSize: 11, fontWeight: 600 },
-      labelBgStyle: { fill: '#f8fbfa', fillOpacity: 0.85 },
-    }));
+  const edges = useMemo(
+    () =>
+      positionedGraph.edges.map((edge) => {
+        const handles = reactFlowHandlesForEdge(edge, geometryById);
+        const label = labelForGraphEdge(edge);
+        const isPartnerEdge = edge.kind === 'partner';
 
-    const unionEdges = unions
-      .filter((union) => union.partner2_id)
-      .map((union) => ({
-        id: `union-${union.id}`,
-        source: union.partner1_id,
-        target: union.partner2_id as string,
-        type: 'straight',
-        label: union.union_type === 'married' ? 'spouse' : union.union_type === 'ex_partner' ? 'ex-partner' : 'partner',
-        style: { stroke: '#d6a7a1', strokeWidth: 2, strokeDasharray: union.union_type === 'ex_partner' ? '6 5' : undefined },
-        labelStyle: { fill: '#9b5c55', fontSize: 11, fontWeight: 600 },
-        labelBgStyle: { fill: '#fff8f7', fillOpacity: 0.92 },
-      }));
-
-    return [...parentEdges, ...unionEdges];
-  }, [parentChild, unions]);
+        return {
+          id: edge.id,
+          source: edge.sourceId,
+          target: edge.targetId,
+          type: handles.type,
+          sourceHandle: handles.sourceHandle,
+          targetHandle: handles.targetHandle,
+          label,
+          style: edgeStyleForFamilyEdge(edge),
+          labelStyle: { fill: isPartnerEdge ? '#9b5c55' : '#667b78', fontSize: 11, fontWeight: 600 },
+          labelBgStyle: { fill: isPartnerEdge ? '#fff8f7' : '#f8fbfa', fillOpacity: 0.9 },
+          data: edge,
+        };
+      }),
+    [geometryById, positionedGraph.edges],
+  );
 
   const selectedUnions = useMemo(
     () => (selectedPersonId ? unions.filter((union) => union.partner1_id === selectedPersonId || union.partner2_id === selectedPersonId) : []),
@@ -424,10 +469,10 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   );
 
   function centerPerson(personId: string) {
-    const position = positions.get(personId);
+    const position = personPositions.get(personId);
     setSelectedPersonId(personId);
     if (position) {
-      setCenter(position.x + 110, position.y + 60, { zoom: 0.9, duration: 500 });
+      setCenter(position.x + FAMILY_LAYOUT.personWidth / 2, position.y + FAMILY_LAYOUT.personHeight / 2, { zoom: 0.9, duration: 500 });
     }
   }
 
@@ -438,9 +483,9 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
 
   if (!persons.length) {
     return (
-      <div className="relative min-h-[560px] overflow-hidden rounded-[32px] border border-border bg-[radial-gradient(circle_at_center,#ffffff_0%,#f4faf8_48%,#edf3f1_100%)] shadow-soft">
+      <div className="relative flex h-full min-h-[520px] overflow-hidden rounded-[24px] border border-border bg-[radial-gradient(circle_at_center,#ffffff_0%,#f4faf8_48%,#edf3f1_100%)] shadow-soft">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(79,141,149,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(79,141,149,0.08)_1px,transparent_1px)] bg-[size:40px_40px]" />
-        <div className="relative grid min-h-[560px] place-items-center p-6 text-center">
+        <div className="relative grid min-h-full flex-1 place-items-center p-6 text-center">
           <div className="max-w-sm">
             <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-full bg-white shadow-[0_16px_44px_rgba(39,95,102,0.14)]">
               <Sparkles className="h-7 w-7 text-accent" />
@@ -472,8 +517,8 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   }
 
   return (
-    <div className="relative overflow-hidden rounded-[32px] border border-border bg-[#f8fbfa] shadow-soft">
-      <div className="flex flex-col gap-3 border-b border-border bg-white/85 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden rounded-[24px] border border-border bg-[#f8fbfa] shadow-soft">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/85 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
         <div className="flex min-w-0 items-center gap-2 rounded-full border border-border bg-white px-3 py-2 shadow-sm md:w-[340px]">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input
@@ -512,46 +557,50 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         </div>
       ) : null}
 
-      <div className="h-[72vh] min-h-[620px]">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.28 }}
-          minZoom={0.25}
-          maxZoom={1.6}
-          proOptions={{ hideAttribution: true }}
-          nodesDraggable={false}
-          onNodeClick={(_: unknown, node: { id: string }) => setSelectedPersonId(node.id)}
-        >
-          <Background color="#dbe8e5" gap={32} />
-          <Controls position="bottom-left" />
-          <MiniMap
-            pannable
-            zoomable
-            position="bottom-right"
-            nodeColor={(node: { id: string }) => (node.id === selectedPersonId ? '#4f8d95' : '#dfe8e6')}
-            maskColor="rgba(248,251,250,0.78)"
-          />
-        </ReactFlow>
-      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="min-h-0 flex-1">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.24 }}
+            minZoom={0.25}
+            maxZoom={1.6}
+            proOptions={{ hideAttribution: true }}
+            nodesDraggable={false}
+            onNodeClick={(_: unknown, node: { id: string; type?: string }) => {
+              if (node.type === 'personBubble') setSelectedPersonId(node.id);
+            }}
+          >
+            <Background color="#dbe8e5" gap={32} />
+            <Controls position="bottom-left" />
+            <MiniMap
+              pannable
+              zoomable
+              position="bottom-right"
+              nodeColor={(node: { id: string; type?: string }) => (node.id === selectedPersonId ? '#4f8d95' : node.type === 'familyJunction' ? '#8daaa7' : '#dfe8e6')}
+              maskColor="rgba(248,251,250,0.78)"
+            />
+          </ReactFlow>
+        </div>
 
-      {selectedPerson ? (
-        <PersonDrawer
-          person={selectedPerson}
-          treeId={treeId}
-          canEdit={canEdit}
-          persons={persons}
-          selectedUnions={selectedUnions}
-          personById={personById}
-          parentCount={parentsByChild.get(selectedPerson.id)?.length ?? 0}
-          updateAction={updatePersonAction}
-          onClose={() => setSelectedPersonId(null)}
-          onCreate={(mode) => setDialog({ mode, targetId: selectedPerson.id })}
-          onConnectExisting={() => setDialog({ mode: 'existing', targetId: selectedPerson.id })}
-        />
-      ) : null}
+        {selectedPerson ? (
+          <PersonDrawer
+            person={selectedPerson}
+            treeId={treeId}
+            canEdit={canEdit}
+            persons={persons}
+            selectedUnions={selectedUnions}
+            personById={personById}
+            parentCount={parentsByChild.get(selectedPerson.id)?.length ?? 0}
+            updateAction={updatePersonAction}
+            onClose={() => setSelectedPersonId(null)}
+            onCreate={(mode) => setDialog({ mode, targetId: selectedPerson.id })}
+            onConnectExisting={() => setDialog({ mode: 'existing', targetId: selectedPerson.id })}
+          />
+        ) : null}
+      </div>
 
       {dialog ? (
         <PersonCreateDialog
@@ -595,7 +644,7 @@ function PersonDrawer({
   onConnectExisting: () => void;
 }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-[28px] border-t border-border bg-white p-4 shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:inset-y-0 md:left-auto md:right-0 md:max-h-none md:w-[390px] md:rounded-l-[28px] md:rounded-tr-none md:border-l md:border-t-0">
+    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-[28px] border-t border-border bg-white p-4 shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[390px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Person details</p>
@@ -641,7 +690,7 @@ function PersonDrawer({
               Partners: {selectedUnions.map((union) => partnerName(union, person.id, personById)).join(', ')}
             </p>
           ) : null}
-          {!parentCount ? <p className="mt-2 text-xs text-muted">No parents linked yet. Siblings can create shared unknown parents if needed.</p> : null}
+          {!parentCount ? <p className="mt-2 text-xs text-muted">Add a parent before adding siblings.</p> : null}
         </div>
       ) : null}
 
@@ -709,6 +758,7 @@ function PersonCreateDialog({
   const targetUnions = targetId ? unions.filter((union) => union.partner1_id === targetId || union.partner2_id === targetId) : [];
   const targetParents = targetId ? parentChild.filter((relation) => relation.child_id === targetId) : [];
   const defaultGender = dialog.mode === 'father' ? 'male' : dialog.mode === 'mother' ? 'female' : '';
+  const siblingWithoutParents = dialog.mode === 'sibling' && targetId && !targetParents.length;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-0 backdrop-blur-sm md:place-items-center md:p-4">
@@ -742,7 +792,12 @@ function PersonCreateDialog({
                   ))}
               </select>
             </label>
-            <SelectField label="Relationship to selected person" name="existing_relation" defaultValue="parent" options={['parent', 'child', 'partner', 'spouse', 'sibling']} />
+            <SelectField
+              label="Relationship to selected person"
+              name="existing_relation"
+              defaultValue="parent"
+              options={['parent', 'child', 'partner', 'spouse', 'ex_partner', 'sibling', 'adoptive_parent', 'foster_parent', 'step_parent', 'guardian']}
+            />
             <Button className="w-full rounded-full">Connect person</Button>
           </form>
         ) : (
@@ -773,13 +828,12 @@ function PersonCreateDialog({
                 </select>
               </label>
             ) : null}
-            {dialog.mode === 'sibling' && targetId && !targetParents.length ? (
-              <label className="flex items-center gap-2 rounded-2xl bg-[#f6faf8] p-3 text-sm text-slate-700">
-                <input type="checkbox" name="create_unknown_parents" />
-                Create shared unknown parents for these siblings
-              </label>
+            {siblingWithoutParents ? (
+              <p className="rounded-2xl bg-[#f6faf8] p-3 text-sm text-slate-700">Add at least one parent to {targetPerson?.display_name} before creating a sibling.</p>
             ) : null}
-            <Button className="w-full rounded-full">{dialog.mode === 'first_person' ? 'Create first bubble' : 'Create person and connect'}</Button>
+            <Button className="w-full rounded-full" disabled={Boolean(siblingWithoutParents)}>
+              {dialog.mode === 'first_person' ? 'Create first bubble' : 'Create person and connect'}
+            </Button>
           </form>
         )}
       </div>

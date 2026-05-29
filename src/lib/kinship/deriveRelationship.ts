@@ -91,21 +91,36 @@ function classify(
   }
 
   // aunt/uncle and nephew/niece
+  const sharedParentCount = (a: string, b: string) => {
+    const aParents = new Set(parentsOf(a).map((r) => r.parent_id));
+    return parentsOf(b).filter((r) => aParents.has(r.parent_id)).length;
+  };
+
+  const areSiblings = (a: string, b: string) => sharedParentCount(a, b) > 0;
+
   for (const fp of parentsOf(focus)) {
-    const fpSibs = input.persons.filter((p) => {
-      const pParents = new Set(parentsOf(p.id).map((r) => r.parent_id));
-      const grandShared = [...pParents].some((pid) => parentsOf(focus).some((fr) => parentsOf(fr.parent_id).some((gr) => gr.parent_id === pid)));
-      return grandShared;
-    });
-    if (fpSibs.some((s) => s.id === target)) return { relationship_label: sexWord(people.get(target), 'uncle', 'aunt', 'uncle/aunt'), generation_delta: 1, relationship_path: [focus, fp.parent_id, target], confidence: 0.8 };
+    const parentSiblingIds = input.persons
+      .filter((p) => p.id !== fp.parent_id && areSiblings(p.id, fp.parent_id))
+      .map((p) => p.id);
+
+    if (parentSiblingIds.includes(target)) {
+      return { relationship_label: sexWord(people.get(target), 'uncle', 'aunt', 'uncle/aunt'), generation_delta: 1, relationship_path: [focus, fp.parent_id, target], confidence: 0.9 };
+    }
+
+    for (const siblingId of parentSiblingIds) {
+      const partnerOfParentSibling = partnersOf(siblingId).some((u) => u.partner_1_id === target || u.partner_2_id === target);
+      const coParentWithParentSibling = childrenOf(siblingId).some((child) => parentsOf(child.child_id).some((r) => r.parent_id === target));
+
+      if (partnerOfParentSibling || coParentWithParentSibling) {
+        return { relationship_label: sexWord(people.get(target), 'uncle', 'aunt', 'uncle/aunt'), generation_delta: 1, relationship_path: [focus, fp.parent_id, siblingId, target], confidence: 0.85 };
+      }
+    }
   }
 
-  for (const child of childrenOf(focus)) {
-    const childSibs = input.persons.filter((p) => {
-      const pParents = new Set(parentsOf(p.id).map((r) => r.parent_id));
-      return [...pParents].some((pid) => parentsOf(child.child_id).some((cpr) => cpr.parent_id === pid));
-    });
-    if (childSibs.some((s) => s.id === target)) return { relationship_label: sexWord(people.get(target), 'nephew', 'niece', 'nephew/niece'), generation_delta: -1, relationship_path: [focus, child.child_id, target], confidence: 0.8 };
+  for (const sibling of input.persons.filter((p) => p.id !== focus && areSiblings(p.id, focus))) {
+    if (childrenOf(sibling.id).some((child) => child.child_id === target)) {
+      return { relationship_label: sexWord(people.get(target), 'nephew', 'niece', 'nephew/niece'), generation_delta: -1, relationship_path: [focus, sibling.id, target], confidence: 0.9 };
+    }
   }
 
   // in-law straightforward: sibling spouse or spouse sibling
