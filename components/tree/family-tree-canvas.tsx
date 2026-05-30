@@ -12,6 +12,7 @@ import {
   UserPlus,
   Users,
   ZoomIn,
+  type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -117,7 +118,7 @@ const nodeTypes = { personBubble: PersonBubbleNode, familyJunction: FamilyJuncti
 
 const relationshipActionGroups: Array<{
   title: string;
-  actions: Array<{ mode: RelationshipMode; label: string; icon: typeof UserPlus }>;
+  actions: Array<{ mode: RelationshipMode; label: string; icon: LucideIcon }>;
 }> = [
   {
     title: 'Parents',
@@ -225,6 +226,18 @@ function lifeYears(person: Person) {
   return 'Life dates unknown';
 }
 
+function lifeDetail(person: Person) {
+  const born = [person.birth_date, person.birth_place].filter(Boolean).join(' - ');
+  const died = [person.death_date, person.death_place].filter(Boolean).join(' - ');
+
+  return [
+    { label: 'Born', value: born },
+    { label: 'Died', value: died },
+    { label: 'Status', value: person.living_status ?? 'unknown' },
+    { label: 'Work', value: person.profession },
+  ].filter((item) => Boolean(item.value));
+}
+
 function partnerName(union: Union, selectedId: string, personById: Map<string, Person>) {
   const partnerId = union.partner1_id === selectedId ? union.partner2_id : union.partner1_id;
   return partnerId ? personById.get(partnerId)?.display_name ?? 'Unknown partner' : 'Unknown partner';
@@ -327,7 +340,7 @@ function PersonBubbleNode({ data }: { data: any }) {
         }
       }}
       className={cn(
-        'nodrag nopan group w-[220px] rounded-xl border bg-white px-4 py-3 text-left shadow-[0_14px_34px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(37,54,63,0.16)]',
+        'nodrag nopan group w-[220px] rounded-lg border bg-white px-4 py-3 text-left shadow-[0_14px_34px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(37,54,63,0.16)]',
         'cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25',
         data.selected ? 'border-accent ring-4 ring-accent/15' : 'border-slate-200',
         isDeceased && 'border-slate-300 bg-slate-50',
@@ -530,16 +543,16 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   if (!persons.length) {
     return (
       <div className="relative flex h-full min-h-[560px] overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_center,#ffffff_0%,#f4faf8_48%,#edf3f1_100%)] shadow-soft">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(79,141,149,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(79,141,149,0.08)_1px,transparent_1px)] bg-[size:40px_40px]" />
+        <div className="genealogy-grid absolute inset-0" />
         <div className="relative grid min-h-full flex-1 place-items-center p-6 text-center">
           <div className="max-w-sm">
             <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-full bg-white shadow-[0_16px_44px_rgba(39,95,102,0.14)]">
               <Sparkles className="h-7 w-7 text-accent" />
             </div>
-            <h2 className="text-3xl font-semibold tracking-tight text-slate-950">Start your family tree</h2>
+            <h2 className="text-3xl font-semibold text-slate-950">Start your family tree</h2>
             <p className="mt-3 text-sm leading-6 text-muted">Begin with any person you know. It can be you, a parent, a grandparent, or an ancestor.</p>
             {canEdit ? (
-            <Button type="button" className="mt-6 rounded-lg px-6 py-3" onClick={() => setDialog({ mode: 'first_person' })}>
+              <Button type="button" className="mt-6 rounded-lg px-6 py-3" onClick={() => setDialog({ mode: 'first_person' })}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add first person
               </Button>
@@ -563,9 +576,9 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   }
 
   return (
-    <div className="relative flex h-full min-h-[620px] flex-col overflow-hidden rounded-xl border border-[#cddbd8] bg-[#f8fbfa] shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+    <div className="relative flex h-full min-h-[620px] flex-col overflow-hidden rounded-lg border border-[#cddbd8] bg-[#f8fbfa] shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
       <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/95 p-3 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 shadow-sm lg:w-[360px]">
+        <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 shadow-sm focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 lg:w-[360px]">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input
             value={query}
@@ -588,7 +601,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         </div>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto border-b border-border bg-white/80 px-3 py-2 md:hidden">
+      <div className="app-nav-scroll flex gap-2 overflow-x-auto border-b border-border bg-white/80 px-3 py-2 md:hidden">
         {quickPeople.map((person) => (
           <button
             key={person.id}
@@ -681,7 +694,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
       </div>
 
       <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 md:hidden">
-        <div className="pointer-events-auto flex items-center justify-between gap-2 rounded-xl border border-[#cddbd8] bg-white/95 p-2 shadow-[0_18px_50px_rgba(15,23,42,0.18)] backdrop-blur">
+        <div className="pointer-events-auto flex items-center justify-between gap-2 rounded-lg border border-[#cddbd8] bg-white/95 p-2 shadow-[0_18px_50px_rgba(15,23,42,0.18)] backdrop-blur">
           <button
             type="button"
             className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border bg-white text-slate-700"
@@ -704,8 +717,8 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
           )}
           {canEdit ? (
             <button
-            type="button"
-            className="grid min-h-11 min-w-11 place-items-center rounded-lg bg-accent text-white"
+              type="button"
+              className="grid min-h-11 min-w-11 place-items-center rounded-lg bg-accent text-white"
               onClick={() => (selectedPerson ? setDetailsOpen(true) : setDialog({ mode: 'first_person' }))}
               aria-label={selectedPerson ? 'Open relationship actions' : 'Add person'}
             >
@@ -754,14 +767,23 @@ function PersonDrawer({
   onCreate: (mode: RelationshipMode) => void;
   onConnectExisting: () => void;
 }) {
+  const facts = lifeDetail(person);
+  const quickActions: Array<{ mode: RelationshipMode | 'existing'; label: string; icon: LucideIcon }> = [
+    { mode: 'parent', label: 'Parent', icon: UserPlus },
+    { mode: 'sibling', label: 'Sibling', icon: Users },
+    { mode: 'partner', label: 'Partner', icon: Heart },
+    { mode: 'child', label: 'Child', icon: Baby },
+    { mode: 'existing', label: 'Existing', icon: Users },
+  ];
+
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-xl border-t border-border bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[400px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:pb-4 md:shadow-none">
+    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-lg border-t border-border bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[410px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:pb-4 md:shadow-none">
       <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-border bg-white/95 px-4 pb-4 pt-3 backdrop-blur md:static md:mx-0 md:mt-0 md:border-b-0 md:bg-transparent md:p-0">
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 md:hidden" />
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Person details</p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{person.display_name}</h2>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-accent">Person details</p>
+            <h2 className="mt-1 truncate text-2xl font-semibold text-slate-950">{person.display_name}</h2>
             <p className="mt-1 text-sm text-muted">{lifeYears(person)}</p>
           </div>
           <button type="button" className="min-h-10 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-slate-50" onClick={onClose}>
@@ -771,13 +793,52 @@ function PersonDrawer({
         </div>
       </div>
 
+      {facts.length ? (
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          {facts.slice(0, 4).map((fact) => (
+            <div key={fact.label} className="min-w-0 rounded-lg border border-[#dfe8e5] bg-[#f8fbfa] p-3">
+              <p className="text-xs font-medium text-muted">{fact.label}</p>
+              <p className="mt-1 truncate text-sm font-semibold capitalize text-slate-900">{fact.value}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
       {canEdit ? (
         <div className="mb-5 rounded-lg border border-[#dfe9e7] bg-[#f5faf8] p-3">
-          <h3 className="text-sm font-semibold text-slate-900">Add a relationship</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Next action</h3>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5 md:grid-cols-2">
+            {quickActions.map((action) => {
+              if (action.mode === 'existing' && persons.length <= 1) return null;
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.mode}
+                  type="button"
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-border bg-white px-3 py-2 text-xs font-semibold text-slate-800 transition hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
+                  onClick={() => (action.mode === 'existing' ? onConnectExisting() : onCreate(action.mode))}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {selectedUnions.length ? (
+            <p className="mt-3 rounded-md bg-white px-3 py-2 text-xs text-muted">
+              Partners: {selectedUnions.map((union) => partnerName(union, person.id, personById)).join(', ')}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {canEdit ? (
+        <div className="mb-5 rounded-lg border border-[#e5ece9] bg-white p-3">
+          <h3 className="text-sm font-semibold text-slate-900">All relationship types</h3>
           <div className="mt-3 space-y-4">
             {relationshipActionGroups.map((group) => (
               <div key={group.title} className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{group.title}</p>
+                <p className="text-xs font-semibold text-slate-500">{group.title}</p>
                 <div className="grid grid-cols-2 gap-2">
                   {group.actions.map((action) => {
                     const Icon = action.icon;
@@ -807,48 +868,58 @@ function PersonDrawer({
               </button>
             ) : null}
           </div>
-          {selectedUnions.length ? (
-            <p className="mt-3 text-xs text-muted">
-              Partners: {selectedUnions.map((union) => partnerName(union, person.id, personById)).join(', ')}
-            </p>
-          ) : null}
         </div>
       ) : null}
 
-      <form key={person.id} action={updateAction} className="space-y-3">
+      <form key={person.id} action={updateAction} className="space-y-4">
         <input type="hidden" name="tree_id" value={treeId} />
         <input type="hidden" name="person_id" value={person.id} />
-        <Field label="Display name" name="display_name" defaultValue={person.display_name} required disabled={!canEdit} />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Full name" name="given_names" defaultValue={person.given_names ?? ''} disabled={!canEdit} />
-          <Field label="Nickname" name="nickname" defaultValue={person.nickname ?? ''} disabled={!canEdit} />
+        <div className="rounded-lg border border-[#e5ece9] bg-white p-3">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">Names</h3>
+          <div className="space-y-3">
+            <Field label="Display name" name="display_name" defaultValue={person.display_name} required disabled={!canEdit} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Full name" name="given_names" defaultValue={person.given_names ?? ''} disabled={!canEdit} />
+              <Field label="Nickname" name="nickname" defaultValue={person.nickname ?? ''} disabled={!canEdit} />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Surname now" name="surname_now" defaultValue={person.surname_now ?? ''} disabled={!canEdit} />
+              <Field label="Surname at birth" name="surname_at_birth" defaultValue={person.surname_at_birth ?? ''} disabled={!canEdit} />
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Surname now" name="surname_now" defaultValue={person.surname_now ?? ''} disabled={!canEdit} />
-          <Field label="Surname at birth" name="surname_at_birth" defaultValue={person.surname_at_birth ?? ''} disabled={!canEdit} />
+        <div className="rounded-lg border border-[#e5ece9] bg-white p-3">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">Life details</h3>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <SelectField label="Living status" name="living_status" defaultValue={person.living_status ?? 'unknown'} disabled={!canEdit} options={['living', 'deceased', 'unknown']} />
+              <Field label="Gender" name="gender" defaultValue={person.gender ?? ''} disabled={!canEdit} />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Birth date" name="birth_date" defaultValue={person.birth_date ?? ''} disabled={!canEdit} />
+              <Field label="Death date" name="death_date" defaultValue={person.death_date ?? ''} disabled={!canEdit} />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Birth place" name="birth_place" defaultValue={person.birth_place ?? ''} disabled={!canEdit} />
+              <Field label="Death place" name="death_place" defaultValue={person.death_place ?? ''} disabled={!canEdit} />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Profession" name="profession" defaultValue={person.profession ?? ''} disabled={!canEdit} />
+              <Field label="Education" name="education" defaultValue={person.education ?? ''} disabled={!canEdit} />
+            </div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <SelectField label="Living status" name="living_status" defaultValue={person.living_status ?? 'unknown'} disabled={!canEdit} options={['living', 'deceased', 'unknown']} />
-          <Field label="Gender" name="gender" defaultValue={person.gender ?? ''} disabled={!canEdit} />
+        <div className="rounded-lg border border-[#e5ece9] bg-white p-3">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">Story</h3>
+          <div className="space-y-3">
+            <TextAreaField label="Short biography" name="short_bio" defaultValue={person.short_bio ?? ''} disabled={!canEdit} />
+            <TextAreaField label="Notes" name="notes" defaultValue={person.notes ?? ''} disabled={!canEdit} />
+            <label className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-[#f8fbfa] px-3 py-2 text-sm text-slate-700">
+              <input type="checkbox" name="is_private" defaultChecked={Boolean(person.is_private)} disabled={!canEdit} className="h-4 w-4 rounded border-border text-accent" />
+              Private person
+            </label>
+          </div>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Birth date" name="birth_date" defaultValue={person.birth_date ?? ''} disabled={!canEdit} />
-          <Field label="Death date" name="death_date" defaultValue={person.death_date ?? ''} disabled={!canEdit} />
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Birth place" name="birth_place" defaultValue={person.birth_place ?? ''} disabled={!canEdit} />
-          <Field label="Death place" name="death_place" defaultValue={person.death_place ?? ''} disabled={!canEdit} />
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Profession" name="profession" defaultValue={person.profession ?? ''} disabled={!canEdit} />
-          <Field label="Education" name="education" defaultValue={person.education ?? ''} disabled={!canEdit} />
-        </div>
-        <TextAreaField label="Short biography" name="short_bio" defaultValue={person.short_bio ?? ''} disabled={!canEdit} />
-        <TextAreaField label="Notes" name="notes" defaultValue={person.notes ?? ''} disabled={!canEdit} />
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" name="is_private" defaultChecked={Boolean(person.is_private)} disabled={!canEdit} />
-          Private person
-        </label>
         {canEdit ? <Button className="w-full rounded-lg">Save details</Button> : null}
       </form>
     </aside>
@@ -878,7 +949,7 @@ function SharedParentChoices({
 
   return (
     <fieldset className="rounded-lg border border-[#dfe9e7] bg-[#f8fbfa] p-3">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Shared parents</legend>
+      <legend className="px-1 text-xs font-semibold text-slate-500">Shared parents</legend>
       <div className="mt-2 space-y-2">
         {targetParents.map((relation) => {
           const parent = personById.get(relation.parent_id);
@@ -934,10 +1005,10 @@ function PersonCreateDialog({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/35 p-0 backdrop-blur-sm md:place-items-center md:p-4">
-      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-xl bg-white p-5 shadow-2xl md:rounded-lg">
+      <div className="max-h-[92dvh] w-full max-w-xl overflow-y-auto rounded-t-lg bg-white p-5 shadow-2xl md:rounded-lg">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">{dialogTitles[dialog.mode]}</h2>
+            <h2 className="text-2xl font-semibold text-slate-950">{dialogTitles[dialog.mode]}</h2>
             <p className="mt-1 text-sm text-muted">
               {targetPerson ? `Connected to ${targetPerson.display_name}.` : 'Start with any person. You can add details later.'}
             </p>
@@ -954,7 +1025,7 @@ function PersonCreateDialog({
             <input type="hidden" name="target_id" value={targetId} />
             <label className="block text-sm font-medium text-slate-700">
               Existing person
-              <select name="existing_person_id" required className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
+              <select name="existing_person_id" required className="studio-field mt-1">
                 {persons
                   .filter((person) => person.id !== targetId)
                   .map((person) => (
@@ -970,7 +1041,7 @@ function PersonCreateDialog({
                 name="existing_relation"
                 value={existingRelation}
                 onChange={(event) => setExistingRelation(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent"
+                className="studio-field mt-1"
               >
                 {existingRelationshipOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1000,7 +1071,7 @@ function PersonCreateDialog({
             {dialog.mode === 'child' && targetUnions.length ? (
               <label className="block text-sm font-medium text-slate-700">
                 Child belongs to
-                <select name="union_id" className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none focus:border-accent">
+                <select name="union_id" className="studio-field mt-1">
                   <option value="">Only {targetPerson?.display_name}</option>
                   {targetUnions.map((union) => (
                     <option key={union.id} value={union.id}>
@@ -1045,7 +1116,7 @@ function Field({
         required={required}
         autoFocus={autoFocus}
         disabled={disabled}
-        className="mt-1 min-h-11 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="studio-field mt-1"
       />
     </label>
   );
@@ -1071,7 +1142,7 @@ function SelectField({
         name={name}
         defaultValue={defaultValue}
         disabled={disabled}
-        className="mt-1 min-h-11 w-full rounded-lg border border-border bg-white px-3 py-3 text-sm capitalize outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="studio-field mt-1 capitalize"
       >
         {options.map((option) => (
           <option key={option} value={option}>
@@ -1104,7 +1175,7 @@ function TextAreaField({
         defaultValue={defaultValue}
         rows={rows}
         disabled={disabled}
-        className="mt-1 w-full resize-none rounded-lg border border-border bg-white px-3 py-3 text-sm outline-none transition focus:border-accent disabled:bg-slate-50"
+        className="studio-field mt-1 resize-none"
       />
     </label>
   );

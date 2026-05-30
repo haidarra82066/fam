@@ -12,13 +12,16 @@
 
 html {
   min-width: 320px;
-  background: #eef4f2;
+  background: #edf4f1;
 }
 
 body {
   @apply bg-background text-foreground antialiased;
   min-height: 100dvh;
   overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(79, 141, 149, 0.10), transparent 34rem),
+    linear-gradient(180deg, #f7faf8 0%, #eef5f2 44%, #f6f8f5 100%);
 }
 
 input,
@@ -26,6 +29,65 @@ select,
 textarea,
 button {
   font: inherit;
+}
+
+::selection {
+  background: rgba(79, 141, 149, 0.20);
+}
+
+a,
+button,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.genealogy-grid {
+  background-image:
+    linear-gradient(rgba(79, 141, 149, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 141, 149, 0.08) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.archive-lines {
+  background-image:
+    linear-gradient(90deg, rgba(165, 87, 78, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(79, 141, 149, 0.08) 1px, transparent 1px);
+  background-size: 44px 100%, 100% 32px;
+}
+
+.studio-field {
+  min-height: 2.75rem;
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #d9e0df;
+  background: #fff;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.studio-field:focus {
+  border-color: #4f8d95;
+  box-shadow: 0 0 0 3px rgba(79, 141, 149, 0.18);
+}
+
+.studio-field:disabled {
+  background: #f1f5f4;
+  color: #64748b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 .app-nav-scroll {

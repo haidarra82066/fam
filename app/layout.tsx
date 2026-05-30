@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'fam',
-  description: 'Family tree builder',
+  description: 'Private genealogy studio for family trees and relationship context',
   icons: {
     icon: '/icon.svg',
   },

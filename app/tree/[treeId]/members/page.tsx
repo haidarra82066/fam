@@ -2,8 +2,8 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { SiteShell } from '@/components/site-shell';
-import { Card } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
+import { EmptyState, SectionHeader, StatusChip, Surface } from '@/components/ui/studio';
 import { createClient } from '@/lib/supabase/server';
 import { parseForm, requireUser, writeAuditLog, z } from '@/lib/security';
 import { cn } from '@/lib/utils';
@@ -80,28 +80,25 @@ export default async function MembersPage({ params }: { params: Promise<{ treeId
   return (
     <SiteShell>
       <div className="space-y-6">
-        <section className="rounded-xl border border-[#cddbd8] bg-white p-5 shadow-[0_18px_55px_rgba(15,23,42,0.07)]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold text-accent">
-                <Users className="h-4 w-4" />
-                Access control
-              </div>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Members</h1>
-              <p className="mt-1 text-sm leading-6 text-muted">Review access and adjust roles for this family tree.</p>
-            </div>
-            <Link className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')} href={`/tree/${treeId}`}>
+        <Surface variant="hero" className="p-5 sm:p-6">
+          <SectionHeader
+            icon={Users}
+            title="Members"
+            description="Review access and adjust roles for this family tree."
+            action={(
+              <Link className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')} href={`/tree/${treeId}`}>
               <ArrowLeft className="h-4 w-4" />
               Back to tree
-            </Link>
-          </div>
-        </section>
+              </Link>
+            )}
+          />
+        </Surface>
         {!members?.length ? (
-          <Card className="grid min-h-48 place-items-center border-dashed border-[#b9ccc9] bg-[#f8fbfa] p-6 text-center text-sm text-muted">No members found.</Card>
+          <EmptyState icon={Users} title="No members found" description="Invite relatives from the tree workspace when you are ready to collaborate." />
         ) : (
           <div className="space-y-3">
             {members.map((member: any) => (
-              <Card key={member.id} className="overflow-hidden border-[#d4e2df] bg-white p-0">
+              <Surface key={member.id} className="overflow-hidden border-[#d4e2df] bg-white p-0">
                 <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#e7f1ef] text-accent">
@@ -110,8 +107,8 @@ export default async function MembersPage({ params }: { params: Promise<{ treeId
                     <div className="min-w-0">
                       <p className="truncate font-medium text-slate-950">{member.profiles?.email}</p>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs font-medium capitalize">
-                        <span className="rounded-md bg-[#eef7f5] px-2 py-1 text-accent">{member.role}</span>
-                        <span className="rounded-md bg-slate-100 px-2 py-1 text-slate-600">{member.status}</span>
+                        <StatusChip tone="accent" className="capitalize">{member.role}</StatusChip>
+                        <StatusChip tone={member.status === 'active' ? 'success' : 'neutral'} className="capitalize">{member.status}</StatusChip>
                       </div>
                       {member.profiles?.status !== 'approved' ? <p className="mt-2 text-xs font-medium text-amber-700">Pending account approval</p> : null}
                     </div>
@@ -121,7 +118,7 @@ export default async function MembersPage({ params }: { params: Promise<{ treeId
                       <form action={updateRole} className="flex flex-col gap-2 sm:flex-row">
                         <input type="hidden" name="membership_id" value={member.id} />
                         <input type="hidden" name="tree_id" value={treeId} />
-                        <select name="role" defaultValue={member.role} className="min-h-11 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-accent">
+                        <select name="role" defaultValue={member.role} className="studio-field sm:w-auto">
                           <option>viewer</option>
                           <option>contributor</option>
                           <option>editor</option>
@@ -136,7 +133,7 @@ export default async function MembersPage({ params }: { params: Promise<{ treeId
                     </div>
                   ) : null}
                 </div>
-              </Card>
+              </Surface>
             ))}
           </div>
         )}

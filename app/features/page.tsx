@@ -1,6 +1,7 @@
 import Link from 'next/link';
+import { ArrowRight, Boxes, Clock3 } from 'lucide-react';
 import { SiteShell } from '@/components/site-shell';
-import { Card } from '@/components/ui/card';
+import { Surface, StatusChip } from '@/components/ui/studio';
 import { featureFlags } from '@/lib/feature-flags';
 
 const items = [
@@ -17,21 +18,38 @@ export default function FeaturesHubPage() {
   return (
     <SiteShell>
       <div className="space-y-6">
-        <Card className="border-0 bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-800 p-8 text-white shadow-xl">
-          <p className="text-xs uppercase tracking-[0.2em] text-white/70">Feature hub</p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-tight">Coming Soon</h1>
-          <p className="mt-3 max-w-3xl text-sm text-white/80">We’re building advanced modules carefully. You can preview each roadmap feature, privacy approach, and intended scope—without any fake or risky functionality today.</p>
-        </Card>
+        <Surface variant="hero" className="archive-lines p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-semibold text-accent">
+                <Boxes className="h-4 w-4" />
+                Feature hub
+              </div>
+              <h1 className="mt-3 text-3xl font-semibold text-slate-950 sm:text-4xl">Coming Soon</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-muted">
+                We're building advanced modules carefully. Preview each roadmap feature, privacy approach, and intended scope without fake or risky functionality today.
+              </p>
+            </div>
+            <StatusChip tone="warning" className="shrink-0"><Clock3 className="mr-1.5 h-3.5 w-3.5" /> Roadmap</StatusChip>
+          </div>
+        </Surface>
+
         <div className="grid gap-4 md:grid-cols-2">
           {items.map((item) => (
-            <Link key={item.href} href={item.href}>
-              <Card className="h-full space-y-3 border-border/80 p-5 transition hover:-translate-y-0.5 hover:shadow-lg">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">{item.title}</h2>
-                  <span className="rounded-full border px-2 py-1 text-xs">{featureFlags[item.key] ? 'Enabled' : 'Coming soon'}</span>
+            <Link key={item.href} href={item.href} className="group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35">
+              <Surface className="flex h-full min-h-40 flex-col justify-between p-5 transition group-hover:-translate-y-0.5 group-hover:shadow-panel">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold text-slate-950">{item.title}</h2>
+                    <p className="mt-2 text-sm leading-6 text-muted">{item.desc}</p>
+                  </div>
+                  <StatusChip tone={featureFlags[item.key] ? 'success' : 'neutral'}>{featureFlags[item.key] ? 'Enabled' : 'Coming soon'}</StatusChip>
                 </div>
-                <p className="text-sm text-muted">{item.desc}</p>
-              </Card>
+                <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                  View detail
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
+                </span>
+              </Surface>
             </Link>
           ))}
         </div>

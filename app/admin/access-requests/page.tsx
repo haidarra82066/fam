@@ -1,9 +1,10 @@
 import { revalidatePath } from 'next/cache';
 import { SiteShell } from '@/components/site-shell';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { EmptyState, SectionHeader, StatusChip, Surface } from '@/components/ui/studio';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { enforceAuthRouteRateLimit, parseForm, requireAdmin, z } from '@/lib/security';
+import { ShieldCheck, UserCheck, UserX, UsersRound } from 'lucide-react';
 
 const accessRequestSchema = z.object({ userId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) });
 
@@ -49,17 +50,22 @@ export default async function AccessRequestsPage() {
   return (
     <SiteShell>
       <div className="space-y-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Access requests</h1>
-            <p className="text-sm text-muted">Approve or reject new accounts before they can open private trees.</p>
-          </div>
-          <span className="w-fit rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-muted">{pendingUsers?.length ?? 0} pending</span>
-        </div>
-        <Card className="overflow-hidden p-0">
-          {!pendingUsers?.length ? (
-            <p className="p-6 text-sm text-muted">No pending requests right now.</p>
-          ) : (
+        <Surface variant="hero" className="p-5 sm:p-6">
+          <SectionHeader
+            icon={ShieldCheck}
+            title="Access requests"
+            description="Approve or reject new accounts before they can open private trees."
+            action={<StatusChip tone="warning">{pendingUsers?.length ?? 0} pending</StatusChip>}
+          />
+        </Surface>
+        {!pendingUsers?.length ? (
+          <EmptyState
+            icon={UsersRound}
+            title="No pending requests"
+            description="New signup requests will appear here for review before they can enter the private workspace."
+          />
+        ) : (
+          <Surface className="overflow-hidden p-0">
             <div className="divide-y divide-border">
               {pendingUsers.map((pendingUser) => (
                 <div key={pendingUser.id} className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -72,19 +78,19 @@ export default async function AccessRequestsPage() {
                     <form action={updateAccessRequest}>
                       <input type="hidden" name="userId" value={pendingUser.id} />
                       <input type="hidden" name="decision" value="approved" />
-                      <Button className="w-full sm:w-auto">Approve</Button>
+                      <Button className="w-full sm:w-auto"><UserCheck className="h-4 w-4" /> Approve</Button>
                     </form>
                     <form action={updateAccessRequest}>
                       <input type="hidden" name="userId" value={pendingUser.id} />
                       <input type="hidden" name="decision" value="rejected" />
-                      <Button className="w-full sm:w-auto" variant="outline">Reject</Button>
+                      <Button className="w-full sm:w-auto" variant="outline"><UserX className="h-4 w-4" /> Reject</Button>
                     </form>
                   </div>
                 </div>
               ))}
             </div>
-          )}
-        </Card>
+          </Surface>
+        )}
       </div>
     </SiteShell>
   );

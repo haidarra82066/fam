@@ -1,8 +1,10 @@
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import crypto from 'node:crypto';
+import Link from 'next/link';
 import { SiteShell } from '@/components/site-shell';
 import { buttonVariants } from '@/components/ui/button';
+import { SetupChecklist } from '@/components/onboarding/setup-checklist';
 import { createClient } from '@/lib/supabase/server';
 import { parseForm, requireUser, writeAuditLog, z } from '@/lib/security';
 import { FamilyTreeCanvas } from '@/components/tree/family-tree-canvas';
@@ -617,10 +619,18 @@ export default async function TreePage({ params, searchParams }: { params: Promi
 
   if (!tree) notFound();
 
-  const [{ data: persons }, { data: unions }, { data: relationships }] = await Promise.all([
+  const [
+    { data: persons },
+    { data: unions },
+    { data: relationships },
+    { count: memberCount },
+    { count: inviteCount },
+  ] = await Promise.all([
     supabase.from('persons').select('*').eq('tree_id', treeId).order('created_at', { ascending: true }),
     supabase.from('unions').select('*').eq('tree_id', treeId).order('created_at', { ascending: true }),
     supabase.from('parent_child_relationships').select('*').eq('tree_id', treeId).order('created_at', { ascending: true }),
+    supabase.from('tree_memberships').select('id', { count: 'exact', head: true }).eq('tree_id', treeId).eq('status', 'active'),
+    supabase.from('invitations').select('id', { count: 'exact', head: true }).eq('tree_id', treeId),
   ]);
 
   const canManageMembers = editorRoles.includes(membership.role as (typeof editorRoles)[number]);
@@ -636,15 +646,16 @@ export default async function TreePage({ params, searchParams }: { params: Promi
   const personCount = persons?.length ?? 0;
   const parentLinkCount = relationships?.length ?? 0;
   const unionCount = unions?.length ?? 0;
+  const hasCollaborationAction = (memberCount ?? 0) > 1 || (inviteCount ?? 0) > 0;
 
   return (
     <SiteShell variant="workspace">
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="shrink-0 overflow-hidden rounded-xl border border-[#cddbd8] bg-white/95 shadow-[0_18px_55px_rgba(15,23,42,0.07)] backdrop-blur">
+        <div className="shrink-0 overflow-hidden rounded-lg border border-[#cddbd8] bg-white/95 shadow-panel backdrop-blur">
           <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{tree.name}</h1>
+                <h1 className="min-w-0 truncate text-2xl font-semibold text-slate-950 sm:text-3xl">{tree.name}</h1>
                 <span className="rounded-md border border-[#d8e7e3] bg-[#f3faf7] px-2 py-1 text-xs font-semibold capitalize text-accent">{membership.role}</span>
               </div>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{tree.description || 'Build the family map one person and one relationship at a time.'}</p>
@@ -655,19 +666,30 @@ export default async function TreePage({ params, searchParams }: { params: Promi
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              <a href={`/tree/${treeId}/members`} className={cn(buttonVariants({ variant: 'outline' }))}>
-                Membership
-              </a>
+              <Link href={`/tree/${treeId}/members`} className={cn(buttonVariants({ variant: 'outline' }))}>
+                Members
+              </Link>
               {canManageMembers ? <ShareModal treeId={treeId} action={createInvitation} latestInviteToken={sp.invite} /> : null}
             </div>
           </div>
         </div>
 
         {sp.error ? (
-          <div className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="shrink-0 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {errorMessages[sp.error] ?? `Action failed: ${sp.error}`}
           </div>
         ) : null}
+
+        <SetupChecklist
+          storageKey={`fam:setup:${treeId}`}
+          title="Tree setup"
+          steps={[
+            { id: 'tree', title: 'Create tree', description: 'This private tree workspace exists and is ready for family data.', complete: true },
+            { id: 'person', title: 'Add first person', description: 'Start the canvas with anyone you know.', complete: personCount > 0, href: `/tree/${treeId}`, actionLabel: 'Add first person' },
+            { id: 'relationship', title: 'Add relationship', description: 'Connect a parent, sibling, partner, child, or existing person.', complete: parentLinkCount + unionCount > 0, href: `/tree/${treeId}`, actionLabel: 'Open relationship actions' },
+            { id: 'invite', title: 'Invite family', description: 'Create an invite or add another active member.', complete: hasCollaborationAction, href: `/tree/${treeId}/members`, actionLabel: 'Review members' },
+          ]}
+        />
 
         <div className="min-h-[620px] flex-1 md:min-h-0">
           <FamilyTreeCanvas
