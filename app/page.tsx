@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { SiteShell } from '@/components/site-shell';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { Search, Share2, Users } from 'lucide-react';
 
 export default function HomePage() {
@@ -12,8 +13,8 @@ export default function HomePage() {
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-5xl">fam</h1>
           <p className="max-w-full text-xl leading-8 text-slate-700">A private workspace for building family trees, inviting relatives, and seeing every relationship in context.</p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Link className="w-full sm:w-auto" href="/signup"><Button className="w-full sm:w-auto">Get started</Button></Link>
-            <Link className="w-full sm:w-auto" href="/login"><Button className="w-full sm:w-auto" variant="outline">Log in</Button></Link>
+            <Link className={cn(buttonVariants(), 'w-full sm:w-auto')} href="/signup">Get started</Link>
+            <Link className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')} href="/login">Log in</Link>
           </div>
         </div>
 

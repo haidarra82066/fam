@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import * as ReactFlowLib from '@xyflow/react';
 import {
   Baby,
+  ChevronUp,
   Heart,
   Lock,
   Search,
@@ -274,6 +275,20 @@ function sideHandles(source: { x: number; y: number }, target: { x: number; y: n
   return { sourceHandle: 'left-source', targetHandle: 'right-target' };
 }
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [query]);
+
+  return matches;
+}
+
 function reactFlowHandlesForEdge(
   edge: FamilyGraphEdge,
   geometryById: Map<string, { position: { x: number; y: number }; width: number; height: number }>,
@@ -306,10 +321,14 @@ function PersonBubbleNode({ data }: { data: any }) {
       tabIndex={0}
       onClick={() => data.onSelect(person.id)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') data.onSelect(person.id);
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          data.onSelect(person.id);
+        }
       }}
       className={cn(
-        'group w-[220px] rounded-xl border bg-white px-4 py-3 text-left shadow-[0_14px_34px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(37,54,63,0.16)]',
+        'nodrag nopan group w-[220px] rounded-xl border bg-white px-4 py-3 text-left shadow-[0_14px_34px_rgba(37,54,63,0.12)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_44px_rgba(37,54,63,0.16)]',
+        'cursor-pointer focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent/25',
         data.selected ? 'border-accent ring-4 ring-accent/15' : 'border-slate-200',
         isDeceased && 'border-slate-300 bg-slate-50',
         !data.searchMatch && 'opacity-30',
@@ -373,8 +392,10 @@ export function FamilyTreeCanvas(props: Props) {
 
 function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, createPersonAction, updatePersonAction }: Props) {
   const { fitView, setCenter } = useReactFlow();
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [query, setQuery] = useState('');
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(persons[0]?.id ?? null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [dialog, setDialog] = useState<CreateDialog | null>(null);
   const personById = useMemo(() => new Map(persons.map((person) => [person.id, person])), [persons]);
   const positionedGraph = useMemo(() => buildPositionedGraph(persons, parentChild, unions), [parentChild, persons, unions]);
@@ -400,6 +421,11 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   const selectedPerson = selectedPersonId ? personById.get(selectedPersonId) ?? null : null;
   const searchValue = query.trim().toLowerCase();
 
+  const selectPerson = useCallback((personId: string, options?: { openDetails?: boolean }) => {
+    setSelectedPersonId(personId);
+    setDetailsOpen(options?.openDetails ?? isDesktop);
+  }, [isDesktop]);
+
   useEffect(() => {
     if (persons.length && selectedPersonId && !personById.has(selectedPersonId)) {
       setSelectedPersonId(persons[0].id);
@@ -411,9 +437,14 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
 
   useEffect(() => {
     if (!persons.length) return;
-    const timer = window.setTimeout(() => fitView({ padding: 0.2, duration: 350 }), 0);
+    setDetailsOpen(isDesktop);
+  }, [isDesktop, persons.length]);
+
+  useEffect(() => {
+    if (!persons.length) return;
+    const timer = window.setTimeout(() => fitView({ padding: isDesktop ? 0.2 : 0.38, duration: 350 }), 0);
     return () => window.clearTimeout(timer);
-  }, [fitView, persons.length, positionedGraph]);
+  }, [fitView, isDesktop, persons.length, positionedGraph]);
 
   const nodes = useMemo(
     () => [
@@ -430,7 +461,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             person,
             selected: person.id === selectedPersonId,
             searchMatch,
-            onSelect: setSelectedPersonId,
+            onSelect: selectPerson,
             relationshipLabel: person.id === selectedPersonId ? 'Focus person' : relationshipLabels[person.id]?.relationship_label ?? 'family member',
           },
         };
@@ -445,7 +476,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         data: { familyUnit: graphNode.familyUnit },
       })),
     ].filter(Boolean),
-    [personById, positionedGraph, relationshipLabels, searchValue, selectedPersonId],
+    [personById, positionedGraph, relationshipLabels, searchValue, selectPerson, selectedPersonId],
   );
 
   const edges = useMemo(
@@ -477,9 +508,10 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
     [selectedPersonId, unions],
   );
 
-  function centerPerson(personId: string) {
+  function centerPerson(personId: string, openDetails = isDesktop) {
     const position = personPositions.get(personId);
-    setSelectedPersonId(personId);
+    selectPerson(personId, { openDetails });
+    if (query) setQuery('');
     if (position) {
       setCenter(position.x + FAMILY_LAYOUT.personWidth / 2, position.y + FAMILY_LAYOUT.personHeight / 2, { zoom: 0.9, duration: 500 });
     }
@@ -489,6 +521,11 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
     () => (searchValue ? persons.filter((person) => person.display_name.toLowerCase().includes(searchValue)).slice(0, 6) : []),
     [persons, searchValue],
   );
+  const quickPeople = useMemo(() => {
+    const selected = selectedPersonId ? persons.find((person) => person.id === selectedPersonId) : null;
+    const rest = persons.filter((person) => person.id !== selectedPersonId).slice(0, 7);
+    return selected ? [selected, ...rest] : rest;
+  }, [persons, selectedPersonId]);
 
   if (!persons.length) {
     return (
@@ -526,8 +563,8 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
   }
 
   return (
-    <div className="relative flex h-full min-h-[560px] flex-col overflow-hidden rounded-lg border border-border bg-[#f8fbfa] shadow-soft">
-      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/90 p-3 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
+    <div className="relative flex h-full min-h-[620px] flex-col overflow-hidden rounded-xl border border-[#cddbd8] bg-[#f8fbfa] shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border bg-white/95 p-3 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-lg border border-border bg-white px-3 py-2 shadow-sm lg:w-[360px]">
           <Search className="h-4 w-4 shrink-0 text-muted" />
           <input
@@ -537,7 +574,7 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             placeholder="Search family members"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="hidden flex-wrap gap-2 sm:flex">
           {canEdit ? (
             <Button type="button" className="rounded-lg" onClick={() => setDialog({ mode: 'first_person' })}>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -551,14 +588,36 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
         </div>
       </div>
 
+      <div className="flex gap-2 overflow-x-auto border-b border-border bg-white/80 px-3 py-2 md:hidden">
+        {quickPeople.map((person) => (
+          <button
+            key={person.id}
+            type="button"
+            className={cn(
+              'flex min-h-11 min-w-[150px] items-center gap-2 rounded-lg border px-2.5 py-2 text-left shadow-sm',
+              person.id === selectedPersonId ? 'border-accent bg-[#eef7f5]' : 'border-border bg-white',
+            )}
+            onClick={() => centerPerson(person.id, false)}
+          >
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[#e8f1ef] text-[11px] font-semibold text-[#275f66]">
+              {initials(person.display_name)}
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-semibold text-slate-950">{person.display_name}</span>
+              <span className="block truncate text-[11px] text-muted">{person.id === selectedPersonId ? 'Selected' : relationshipLabels[person.id]?.relationship_label ?? 'Family'}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
       {searchMatches.length ? (
-        <div className="absolute left-4 top-[76px] z-20 w-[min(320px,calc(100%-2rem))] rounded-lg border border-border bg-white p-2 shadow-soft">
+        <div className="absolute left-4 top-[72px] z-20 w-[min(320px,calc(100%-2rem))] rounded-lg border border-border bg-white p-2 shadow-soft sm:top-[76px]">
           {searchMatches.map((person) => (
             <button
               key={person.id}
               type="button"
               className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-[#eef7f5]"
-              onClick={() => centerPerson(person.id)}
+              onClick={() => centerPerson(person.id, isDesktop)}
             >
               {person.display_name}
             </button>
@@ -572,29 +631,40 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
+            className="family-tree-flow"
             fitView
-            fitViewOptions={{ padding: 0.24 }}
+            fitViewOptions={{ padding: isDesktop ? 0.24 : 0.38 }}
             minZoom={0.25}
             maxZoom={1.6}
             proOptions={{ hideAttribution: true }}
             nodesDraggable={false}
+            nodesConnectable={false}
+            selectionOnDrag={false}
+            panOnDrag
+            zoomOnPinch
+            zoomOnScroll={false}
+            preventScrolling={false}
             onNodeClick={(_: unknown, node: { id: string; type?: string }) => {
-              if (node.type === 'personBubble') setSelectedPersonId(node.id);
+              if (node.type === 'personBubble') selectPerson(node.id);
             }}
           >
             <Background color="#dbe8e5" gap={32} />
-            <Controls position="bottom-left" />
-            <MiniMap
-              pannable
-              zoomable
-              position="bottom-right"
-              nodeColor={(node: { id: string; type?: string }) => (node.id === selectedPersonId ? '#4f8d95' : node.type === 'familyJunction' ? '#8daaa7' : '#dfe8e6')}
-              maskColor="rgba(248,251,250,0.78)"
-            />
+            {isDesktop ? (
+              <>
+                <Controls position="bottom-left" />
+                <MiniMap
+                  pannable
+                  zoomable
+                  position="bottom-right"
+                  nodeColor={(node: { id: string; type?: string }) => (node.id === selectedPersonId ? '#4f8d95' : node.type === 'familyJunction' ? '#8daaa7' : '#dfe8e6')}
+                  maskColor="rgba(248,251,250,0.78)"
+                />
+              </>
+            ) : null}
           </ReactFlow>
         </div>
 
-        {selectedPerson ? (
+        {selectedPerson && detailsOpen ? (
           <PersonDrawer
             person={selectedPerson}
             treeId={treeId}
@@ -603,11 +673,46 @@ function FamilyTreeCanvasInner({ persons, unions, parentChild, treeId, canEdit, 
             selectedUnions={selectedUnions}
             personById={personById}
             updateAction={updatePersonAction}
-            onClose={() => setSelectedPersonId(null)}
+            onClose={() => setDetailsOpen(false)}
             onCreate={(mode) => setDialog({ mode, targetId: selectedPerson.id })}
             onConnectExisting={() => setDialog({ mode: 'existing', targetId: selectedPerson.id })}
           />
         ) : null}
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 md:hidden">
+        <div className="pointer-events-auto flex items-center justify-between gap-2 rounded-xl border border-[#cddbd8] bg-white/95 p-2 shadow-[0_18px_50px_rgba(15,23,42,0.18)] backdrop-blur">
+          <button
+            type="button"
+            className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-border bg-white text-slate-700"
+            onClick={() => fitView({ padding: 0.38, duration: 450 })}
+            aria-label="Fit tree"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          {selectedPerson ? (
+            <button
+              type="button"
+              className="flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"
+              onClick={() => setDetailsOpen(true)}
+            >
+              <ChevronUp className="h-4 w-4" />
+              <span className="truncate">{selectedPerson.display_name}</span>
+            </button>
+          ) : (
+            <div className="min-w-0 flex-1 px-2 text-center text-xs font-medium text-muted">No person selected</div>
+          )}
+          {canEdit ? (
+            <button
+            type="button"
+            className="grid min-h-11 min-w-11 place-items-center rounded-lg bg-accent text-white"
+              onClick={() => (selectedPerson ? setDetailsOpen(true) : setDialog({ mode: 'first_person' }))}
+              aria-label={selectedPerson ? 'Open relationship actions' : 'Add person'}
+            >
+              <UserPlus className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {dialog ? (
@@ -650,16 +755,20 @@ function PersonDrawer({
   onConnectExisting: () => void;
 }) {
   return (
-    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-xl border-t border-border bg-white p-4 shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[400px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:shadow-none">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Person details</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{person.display_name}</h2>
-          <p className="mt-1 text-sm text-muted">{lifeYears(person)}</p>
+    <aside className="absolute inset-x-0 bottom-0 z-30 max-h-[88%] overflow-y-auto rounded-t-xl border-t border-border bg-white p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-[0_-18px_60px_rgba(15,23,42,0.18)] md:relative md:inset-auto md:h-full md:max-h-none md:w-[400px] md:shrink-0 md:rounded-none md:border-l md:border-t-0 md:pb-4 md:shadow-none">
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-border bg-white/95 px-4 pb-4 pt-3 backdrop-blur md:static md:mx-0 md:mt-0 md:border-b-0 md:bg-transparent md:p-0">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200 md:hidden" />
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Person details</p>
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">{person.display_name}</h2>
+            <p className="mt-1 text-sm text-muted">{lifeYears(person)}</p>
+          </div>
+          <button type="button" className="min-h-10 rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-slate-50" onClick={onClose}>
+            <span className="md:hidden">Back to tree</span>
+            <span className="hidden md:inline">Close</span>
+          </button>
         </div>
-        <button type="button" className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted hover:bg-slate-50" onClick={onClose}>
-          Close
-        </button>
       </div>
 
       {canEdit ? (
@@ -710,27 +819,27 @@ function PersonDrawer({
         <input type="hidden" name="tree_id" value={treeId} />
         <input type="hidden" name="person_id" value={person.id} />
         <Field label="Display name" name="display_name" defaultValue={person.display_name} required disabled={!canEdit} />
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Full name" name="given_names" defaultValue={person.given_names ?? ''} disabled={!canEdit} />
           <Field label="Nickname" name="nickname" defaultValue={person.nickname ?? ''} disabled={!canEdit} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Surname now" name="surname_now" defaultValue={person.surname_now ?? ''} disabled={!canEdit} />
           <Field label="Surname at birth" name="surname_at_birth" defaultValue={person.surname_at_birth ?? ''} disabled={!canEdit} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SelectField label="Living status" name="living_status" defaultValue={person.living_status ?? 'unknown'} disabled={!canEdit} options={['living', 'deceased', 'unknown']} />
           <Field label="Gender" name="gender" defaultValue={person.gender ?? ''} disabled={!canEdit} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Birth date" name="birth_date" defaultValue={person.birth_date ?? ''} disabled={!canEdit} />
           <Field label="Death date" name="death_date" defaultValue={person.death_date ?? ''} disabled={!canEdit} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Birth place" name="birth_place" defaultValue={person.birth_place ?? ''} disabled={!canEdit} />
           <Field label="Death place" name="death_place" defaultValue={person.death_place ?? ''} disabled={!canEdit} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Profession" name="profession" defaultValue={person.profession ?? ''} disabled={!canEdit} />
           <Field label="Education" name="education" defaultValue={person.education ?? ''} disabled={!canEdit} />
         </div>

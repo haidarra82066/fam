@@ -28,6 +28,14 @@ button {
   font: inherit;
 }
 
+.app-nav-scroll {
+  scrollbar-width: none;
+}
+
+.app-nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 .react-flow__controls {
   border-radius: 12px;
   border: 1px solid #d9e0df;
@@ -44,4 +52,13 @@ button {
   border: 1px solid #d9e0df;
   border-radius: 12px;
   overflow: hidden;
+}
+
+.family-tree-flow .react-flow__pane,
+.family-tree-flow .react-flow__viewport {
+  touch-action: none;
+}
+
+.family-tree-flow .react-flow__node {
+  touch-action: manipulation;
 }

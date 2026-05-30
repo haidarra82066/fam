@@ -5,6 +5,9 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'fam',
   description: 'Family tree builder',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

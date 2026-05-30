@@ -2,11 +2,12 @@ import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import crypto from 'node:crypto';
 import { SiteShell } from '@/components/site-shell';
-import { Button } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button';
 import { createClient } from '@/lib/supabase/server';
 import { parseForm, requireUser, writeAuditLog, z } from '@/lib/security';
 import { FamilyTreeCanvas } from '@/components/tree/family-tree-canvas';
 import { ShareModal } from '@/components/tree/share-modal';
+import { cn } from '@/lib/utils';
 
 const editorRoles = ['owner', 'editor'] as const;
 const contributorRoles = ['owner', 'editor', 'contributor'] as const;
@@ -632,22 +633,33 @@ export default async function TreePage({ params, searchParams }: { params: Promi
     person_failed: 'The person could not be created.',
     not_authorized: 'You do not have permission to do that.',
   };
+  const personCount = persons?.length ?? 0;
+  const parentLinkCount = relationships?.length ?? 0;
+  const unionCount = unions?.length ?? 0;
 
   return (
     <SiteShell variant="workspace">
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="shrink-0 rounded-lg border border-border bg-white/90 px-4 py-3 shadow-soft backdrop-blur">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{tree.name}</h1>
-            <p className="mt-1 max-w-2xl text-sm text-muted">{tree.description || 'Build the family map one person and one relationship at a time.'}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <a href={`/tree/${treeId}/members`}>
-              <Button variant="outline">Membership</Button>
-            </a>
-            {canManageMembers ? <ShareModal treeId={treeId} action={createInvitation} latestInviteToken={sp.invite} /> : null}
-          </div>
+        <div className="shrink-0 overflow-hidden rounded-xl border border-[#cddbd8] bg-white/95 shadow-[0_18px_55px_rgba(15,23,42,0.07)] backdrop-blur">
+          <div className="flex flex-col gap-4 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{tree.name}</h1>
+                <span className="rounded-md border border-[#d8e7e3] bg-[#f3faf7] px-2 py-1 text-xs font-semibold capitalize text-accent">{membership.role}</span>
+              </div>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{tree.description || 'Build the family map one person and one relationship at a time.'}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+                <span className="rounded-md bg-[#eef7f5] px-2.5 py-1">{personCount} people</span>
+                <span className="rounded-md bg-[#fff2ef] px-2.5 py-1">{unionCount} unions</span>
+                <span className="rounded-md bg-slate-100 px-2.5 py-1">{parentLinkCount} parent links</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <a href={`/tree/${treeId}/members`} className={cn(buttonVariants({ variant: 'outline' }))}>
+                Membership
+              </a>
+              {canManageMembers ? <ShareModal treeId={treeId} action={createInvitation} latestInviteToken={sp.invite} /> : null}
+            </div>
           </div>
         </div>
 
